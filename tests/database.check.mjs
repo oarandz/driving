@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 const db=new PGlite({extensions:{btree_gist}});
 await db.exec(`
 create schema auth;create schema storage;create schema extensions;
-create role anon;create role authenticated;
+create role anon;create role authenticated;create role service_role bypassrls;
 grant usage on schema public,auth,storage to anon,authenticated;
-create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,raw_app_meta_data jsonb default '{}');
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
 create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
 create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
@@ -15,9 +15,12 @@ alter table storage.objects enable row level security;
 grant select,insert,delete on storage.objects to authenticated;
 `);
 await db.exec(await fs.readFile(new URL('../supabase/migrations/202609160001_initial.sql',import.meta.url),'utf8'));
-console.log('PASS: complete migration applies to PostgreSQL');
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609170001_gpx_upload.sql',import.meta.url),'utf8'));
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609170002_edit_lesson_times.sql',import.meta.url),'utf8'));
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609170003_gpx_mileage.sql',import.meta.url),'utf8'));
+console.log('PASS: all migrations apply to PostgreSQL');
 const instructor='11111111-1111-1111-1111-111111111111',alice='22222222-2222-2222-2222-222222222222',bob='33333333-3333-3333-3333-333333333333',unknown='44444444-4444-4444-4444-444444444444';
-await db.exec(`insert into auth.users values('${instructor}','instructor@example.com',now()),('${alice}','alice@example.com',now()),('${bob}','bob@example.com',now()),('${unknown}','unknown@example.com',now());insert into public.instructors values('${instructor}');`);
+await db.exec(`insert into auth.users(id,email,email_confirmed_at) values('${instructor}','instructor@example.com',now()),('${alice}','alice@example.com',now()),('${bob}','bob@example.com',now()),('${unknown}','unknown@example.com',now());insert into public.instructors values('${instructor}');`);
 async function asUser(id){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id}',false);set role authenticated;`);}
 async function denied(fn){await assert.rejects(fn);}
 await asUser(instructor);
@@ -73,4 +76,139 @@ await denied(()=>db.query('select public.import_lesson_route($1,$2)',[first,JSON
 await asUser(alice);assert.equal((await db.query('select * from public.route_points')).rows.length,1);
 await asUser(bob);assert.equal((await db.query('select * from public.route_points')).rows.length,0);
 console.log('PASS: imported route timestamps validated and route privacy enforced');
+await asUser(instructor);
+const route=[{lat:51.5,lng:-2.5,recorded_at:'2026-09-17T08:34:39Z',segment_id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'},{lat:51.51,lng:-2.51,recorded_at:'2026-09-17T09:42:27Z',segment_id:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'}];
+async function upload(id=second,points=route){return (await db.query('select public.save_gpx_route($1,$2,$3) as added',[id,'sample.gpx',JSON.stringify(points)])).rows[0].added;}
+const before=(await db.query('select starts_at,ends_at,started_at,ended_at,start_mileage,end_mileage,status from public.lessons where id=$1',[second])).rows[0];
+assert.equal(await upload(),2); // A scheduled lesson, with route timestamps outside its booked time.
+assert.equal(await upload(),0); // Retry is idempotent.
+assert.equal((await db.query('select route_file_name from public.lessons where id=$1',[second])).rows[0].route_file_name,'sample.gpx');
+assert.deepEqual((await db.query('select starts_at,ends_at,started_at,ended_at,start_mileage,end_mileage,status from public.lessons where id=$1',[second])).rows[0],before);
+assert.equal((await db.query('select segment_id from public.route_points where lesson_id=$1',[second])).rows.length,2);
+await denied(()=>upload(second,[...route,{...route[0],lat:91}]));
+await denied(()=>upload(second,[]));await denied(()=>upload(second,[{...route[0],recorded_at:null}]));
+assert.equal((await db.query('select * from public.route_points where lesson_id=$1',[second])).rows.length,2);
+await asUser(alice);assert.equal((await db.query('select * from public.route_points where lesson_id=$1',[second])).rows.length,0);await denied(()=>upload());
+await asUser(bob);assert.equal((await db.query('select * from public.route_points where lesson_id=$1',[second])).rows.length,2);await denied(()=>upload());
+await asUser(unknown);assert.equal((await db.query('select * from public.route_points')).rows.length,0);await denied(()=>upload());
+await db.exec('reset role;set role anon;');await denied(()=>upload());
+await asUser(instructor);
+const getLesson=async id=>(await db.query('select * from public.lessons where id=$1',[id])).rows[0];
+const snapshot=l=>Object.fromEntries(['starts_at','ends_at','started_at','ended_at','status'].map(k=>[k,l[k]]));
+async function edit(l,changes={},previous=null,next=null,before=20,after=20){
+ const c={...l,...changes};
+ await db.query('select public.edit_lesson_times($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[l.id,c.starts_at,c.ends_at,c.started_at,c.ended_at,JSON.stringify(snapshot(l)),before,after,previous,next]);
+}
+let original=await getLesson(second);
+const savedPoints=(await db.query('select * from public.route_points where lesson_id=$1 order by id',[second])).rows;
+await edit(original,{starts_at:'2026-09-16T12:30Z',ends_at:'2026-09-16T14:30Z'},first,third);
+let edited=await getLesson(second);assert.equal(new Date(edited.starts_at).toISOString(),'2026-09-16T12:30:00.000Z');assert.equal(edited.status,'scheduled');
+assert.equal(edited.route_file_name,original.route_file_name);
+assert.deepEqual((await db.query('select * from public.route_points where lesson_id=$1 order by id',[second])).rows,savedPoints);
+await denied(()=>edit(original,{},first,third)); // Stale form cannot overwrite a newer edit.
+await denied(()=>edit(edited,{starts_at:'2026-09-16T10:00Z',ends_at:'2026-09-16T12:00Z'},null,third));
+await denied(()=>edit(edited,{starts_at:'2026-09-16T11:05Z',ends_at:'2026-09-16T12:00Z'},first,third));
+await denied(()=>edit(edited,{starts_at:'2026-09-18T08:00Z',ends_at:'2026-09-18T08:50Z'},first,third));
+await denied(()=>edit(edited,{starts_at:'2026-09-16T12:30Z',ends_at:'2026-09-16T12:00Z'},first,third));
+await denied(()=>edit(edited,{ends_at:'2026-09-17T01:00Z'},first,third));
+await denied(()=>edit(edited,{starts_at:'infinity',ends_at:'infinity'},first,third));
+await denied(()=>edit(edited,{started_at:'2026-09-16T12:30Z'}));
+await denied(()=>edit(edited,{starts_at:'2026-09-16T13:00Z',ends_at:'2026-09-16T15:00Z'},null,third));
+assert.deepEqual(await getLesson(second),edited); // Invalid edits are atomic.
+original=await getLesson(first);
+await edit(original,{started_at:'2026-09-16T09:05Z',ended_at:'2026-09-16T10:35Z'});
+let completed=await getLesson(first);
+assert.equal((new Date(completed.ended_at)-new Date(completed.started_at))/3600000,1.5);
+for(const key of ['starts_at','ends_at','start_mileage','end_mileage','paid','objectives','next_aims','status','travel_source'])assert.deepEqual(completed[key],original[key]);
+await denied(()=>edit(completed,{ended_at:'2026-09-16T08:00Z'}));
+await denied(()=>edit(completed,{started_at:null}));
+await edit(completed,{starts_at:'2026-09-16T08:30Z',ends_at:'2026-09-16T10:30Z'},null,second);
+await edit(edited,{starts_at:'2026-09-19T09:00Z',ends_at:'2026-09-19T11:00Z'},third,null);
+assert.equal((await getLesson(third)).travel_source,'review');
+assert.equal((await getLesson(second)).travel_before_minutes,20);
+for(const person of [alice,bob,unknown]){await asUser(person);await denied(()=>edit(completed));}
+await db.exec('reset role;set role anon;');await denied(()=>edit(completed));
+await asUser(instructor);
+const activeId=await book(a,'2026-09-20T09:00Z','2026-09-20T11:00Z',second);
+await db.query('select public.start_lesson($1,1050)',[activeId]);
+const active=await getLesson(activeId);
+await edit(active,{started_at:new Date(Date.now()-3600000).toISOString()});
+const activeEdited=await getLesson(activeId);
+await denied(()=>edit(activeEdited,{started_at:'2099-01-01T09:00Z'}));
+await denied(()=>edit(activeEdited,{ended_at:new Date().toISOString()}));
+console.log('PASS: scheduled/completed/active edits, totals, unchanged routes and notes, travel gaps, stale edits, moved neighbours and read-only pupil access');
+await asUser(instructor);await db.query('select public.cancel_lesson($1)',[second]);await denied(()=>upload());
+const cancelled=await getLesson(second);await denied(()=>edit(cancelled));
+console.log('PASS: full GPX saved and reread, timestamp mismatch allowed, retry deduplicated, segments retained, lesson totals unchanged, invalid input atomic, pupil/anonymous permissions preserved');
+const gpsLesson=await book(b,'2026-09-21T09:00Z','2026-09-21T11:00Z',activeId);
+const gpsPoints=[{lat:0,lng:0,recorded_at:'2026-09-21T09:05Z',segment_id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'},{lat:0,lng:0.01,recorded_at:'2026-09-21T09:06Z',segment_id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'},{lat:0,lng:1,recorded_at:'2026-09-21T10:55Z',segment_id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}];
+const saveGps=(id=gpsLesson,points=gpsPoints,complete=true)=>db.query('select public.save_gpx_lesson($1,$2,$3,$4)',[id,'gps.gpx',JSON.stringify(points),complete]);
+await denied(()=>saveGps(gpsLesson,[gpsPoints[0]]));
+assert.equal((await getLesson(gpsLesson)).route_distance_miles,null);
+assert.equal((await db.query('select * from public.route_points where lesson_id=$1',[gpsLesson])).rows.length,0);
+await saveGps();
+const gpsDone=await getLesson(gpsLesson);
+assert.equal(gpsDone.status,'completed');assert.equal(gpsDone.start_mileage,null);assert.equal(gpsDone.end_mileage,null);
+assert.equal(new Date(gpsDone.started_at).toISOString(),'2026-09-21T09:05:00.000Z');assert.equal(new Date(gpsDone.ended_at).toISOString(),'2026-09-21T10:55:00.000Z');
+assert.ok(Math.abs(gpsDone.route_distance_miles-0.690934195756)<0.000001);
+await saveGps(gpsLesson,gpsPoints,false);
+assert.equal((await getLesson(gpsLesson)).route_distance_miles,gpsDone.route_distance_miles);
+await denied(()=>saveGps()); // Do not overwrite a completed lesson's driving times.
+await edit(gpsDone,{ended_at:'2026-09-21T11:05Z'});
+assert.equal((await getLesson(gpsLesson)).route_distance_miles,gpsDone.route_distance_miles);
+await denied(()=>saveGps(activeId)); // Active timer cannot be silently completed by an old upload.
+for(const user of [alice,bob,unknown]){await asUser(user);await denied(()=>saveGps(gpsLesson,gpsPoints,false));}
+await asUser(bob);const ownGps=await getLesson(gpsLesson);assert.equal(ownGps.route_distance_miles,gpsDone.route_distance_miles);
+await db.exec('reset role;set role anon;');await denied(()=>saveGps());
+console.log('PASS: GPS mileage calculation and gaps, GPX-only completion without odometer, atomic invalid completion, retry deduplication, corrected times, pupil visibility and denied pupil writes');
+await db.exec('reset role');
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609170004_pupil_access.sql',import.meta.url),'utf8'));
+await asUser(instructor);
+await db.query('select public.edit_pupil_email($1,$2,$3)',[a,'ALICE.NEW@example.com','alice@example.com']);
+assert.equal((await db.query('select email from public.pupils where id=$1',[a])).rows[0].email,'alice.new@example.com');
+await denied(()=>db.query('select public.edit_pupil_email($1,$2,$3)',[a,'bob@example.com','alice.new@example.com']));
+await denied(()=>db.query('select public.edit_pupil_email($1,$2,$3)',[a,'bad-email','alice.new@example.com']));
+await denied(()=>db.query('select public.edit_pupil_email($1,$2,$3)',[a,'new@example.com','alice@example.com']));
+await asUser(alice);await denied(()=>db.query('select public.edit_pupil_email($1,$2,$3)',[a,'new@example.com','alice.new@example.com']));
+await denied(()=>db.query('select public.allow_pupil_code_attempt($1)',['a'.repeat(64)]));
+const fresh='55555555-5555-5555-5555-555555555555',reset='66666666-6666-6666-6666-666666666666';
+await db.exec('reset role');
+await db.query('insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data) values($1,$2,now(),$3),($4,$5,now(),$3)',[fresh,'private1@login.invalid',JSON.stringify({pupil_id:a,managed_pupil:true}),reset,'private2@login.invalid']);
+await asUser(instructor);await denied(()=>db.query('select public.activate_pupil_code($1,$2,$3,$4)',[a,fresh,alice,'alice.new@example.com']));
+await db.exec('reset role;set role service_role');
+assert.equal((await db.query('select id,email,user_id,access_issued_at from public.pupils where id=$1',[a])).rows.length,1);
+assert.equal((await db.query('select user_id from public.instructors')).rows.length,1);
+await db.query('select public.activate_pupil_code($1,$2,$3,$4)',[a,fresh,alice,'alice.new@example.com']);
+await denied(()=>db.query('select public.activate_pupil_code($1,$2,$3,$4)',[a,reset,alice,'alice.new@example.com']));
+for(let i=0;i<8;i++)assert.equal((await db.query('select public.allow_pupil_code_attempt($1) as allowed',['a'.repeat(64)])).rows[0].allowed,true);
+assert.equal((await db.query('select public.allow_pupil_code_attempt($1) as allowed',['a'.repeat(64)])).rows[0].allowed,false);
+await asUser(alice);assert.equal((await db.query('select * from public.lessons')).rows.length,0);await db.query('select public.claim_pupil_account()');assert.equal((await db.query('select * from public.pupils')).rows.length,0);
+await asUser(fresh);assert.equal((await db.query('select * from public.lessons')).rows.length,3); // Alice's three lessons, including the active sample.
+await db.exec('reset role;set role service_role');
+await db.query('select public.activate_pupil_code($1,$2,$3,$4)',[a,reset,fresh,'alice.new@example.com']);
+await asUser(fresh);assert.equal((await db.query('select * from public.lessons')).rows.length,0);assert.equal((await db.query('select * from storage.objects')).rows.length,0);
+await asUser(reset);assert.equal((await db.query('select * from public.lessons')).rows.length,3);
+await asUser(bob);assert.equal((await db.query('select * from public.lessons where pupil_id=$1',[a])).rows.length,0);
+console.log('PASS: instructor email edits, duplicate/stale rejection, service-only code activation, old login revocation, pupil isolation and atomic attempt limits');
+await db.exec('reset role');
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609170005_lesson_youtube.sql',import.meta.url),'utf8'));
+await asUser(instructor);
+const pin=async(lessonId=first,video='7lCDEYXw3mM',title='Junction recap')=>(await db.query('select public.pin_lesson_video($1,$2,$3) as id',[lessonId,video,title])).rows[0].id;
+const video=await pin();assert.equal(await pin(),video);
+assert.equal((await db.query('select * from public.lesson_videos where lesson_id=$1',[first])).rows.length,1);
+await pin(first,'7lCDEYXw3mM','Updated title');
+await denied(()=>pin(first,'bad','Test'));await denied(()=>pin(first,'7lCDEYXw3mM',' '));await denied(()=>pin(second));
+await denied(()=>pin('77777777-7777-7777-7777-777777777777'));
+await asUser(reset);assert.equal((await db.query('select title from public.lesson_videos')).rows[0].title,'Updated title');
+await denied(()=>pin());await denied(()=>db.query('select public.unpin_lesson_video($1)',[video]));
+await denied(()=>db.query("insert into public.lesson_videos(lesson_id,video_id,title) values($1,'7lCDEYXw3mM','Fake')",[first]));
+await asUser(bob);assert.equal((await db.query('select * from public.lesson_videos')).rows.length,0);
+await asUser(unknown);assert.equal((await db.query('select * from public.lesson_videos')).rows.length,0);
+await db.exec('reset role;set role anon');await denied(()=>db.query('select * from public.lesson_videos'));await denied(()=>pin());
+await asUser(instructor);await db.query('select public.unpin_lesson_video($1)',[video]);
+assert.equal((await db.query('select pinned from public.lesson_videos where id=$1',[video])).rows[0].pinned,false);
+await asUser(reset);assert.equal((await db.query('select * from public.lesson_videos')).rows.length,0);
+await asUser(instructor);assert.equal(await pin(),video);
+await asUser(reset);assert.equal((await db.query('select * from public.lesson_videos')).rows.length,1);
+console.log('PASS: completed-lesson video pins, duplicate prevention, title update, invalid/cancelled targets, reversible unpin, pupil isolation and denied pupil writes');
 await db.close();

@@ -1,6 +1,51 @@
 # Upload and remaining setup
 
-## Upload to GitHub
+## Latest update: YouTube videos and lesson resources
+
+Extract **youtube-resources-update.zip**. Upload **all its contents, including the tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for the Pages deployment, then refresh the website. Upload the extracted files, not the ZIP itself.
+
+This is a cumulative update, including pupil access codes, email editing, GPX mileage and editable lesson times. Keep the folders included: the publishing checks use the updated tests and supporting files. Your existing website configuration and icons do not need replacing.
+
+The YouTube database update has already been applied to your Supabase project. No Supabase setup is needed for this update.
+
+1. Sign in as the instructor and open a lesson, including a completed lesson.
+2. Under **Lesson resources**, choose **Pin a YouTube video**.
+3. Paste the video link, optionally enter a title, then choose **Pin video to lesson**.
+4. The pupil sees a thumbnail card in that lesson's resources. Selecting the card opens YouTube in a new tab.
+5. Choose **Unpin video** to remove it from the pupil's view. Pinning the same link again restores it without creating a duplicate.
+
+You can also choose **Pin a library resource** in the lesson to attach an existing teaching file. Upload files in the Resources area first. Pupils cannot add or remove resources or videos.
+
+Titles are entered manually; a blank title displays “YouTube video”. Private, deleted or restricted videos may not be available to the pupil, and thumbnails depend on YouTube being reachable.
+
+## Pupil emails and reusable access codes
+
+The pupil-access migration, Edge Function and explicitly approved database lookup permissions are applied. Live checks passed for browser connection, rejection of anonymous code generation and rejection of an unknown pupil sign-in. Generate the first real pupil code and check successful sign-in after uploading the frontend.
+
+1. Choose **Instructor sign in** and use your existing email/password.
+2. Open **Pupils → Email & access code** for the pupil.
+3. Edit the email and choose **Save email**, or choose **Generate access code** (which also saves an edited email).
+4. Copy the displayed code and give it to the pupil. It is shown once; choose **Generate new code** if a replacement is needed.
+5. The pupil chooses **Pupil sign in**, enters their email and code, and can read only their own records.
+
+Codes remain valid until replaced. Resetting a code disconnects the previous login from that pupil’s records. Pupil access does not use email delivery. Your instructor password remains separate.
+
+## Lesson times and GPS mileage
+
+These features are included in the latest update, and their Supabase migrations are already applied.
+
+- Open a lesson → **Edit lesson times** to correct booked dates/times or actual driving times, even after completion. Actual times update pupil hours. When moving a booking, check the displayed manual travel allowances.
+- Open a lesson → **Upload a GPX route**. Preview the map and GPS mileage, then **Save route to lesson**. GPS mileage is saved and used for that completed lesson’s contribution to pupil totals.
+- For a booked lesson, tick **Mark lesson completed using this recording’s start and finish times** to complete it directly from the file, without using the website recorder or entering odometer readings. Leave it unticked to attach the route and mileage only.
+- GPS mileage is an estimate. Recording gaps over 90 seconds and separate segments are not joined. Recordings append to the lesson; upload only routes belonging to that lesson. Identical points are deduplicated.
+
+The complete route is attached even if its timestamps differ from the lesson times. Its coordinates, recording times, segments and filename are saved; the original GPX file is not separately archived. Hours use actual lesson times. Mileage uses imported GPS distance when present and odometer readings otherwise.
+
+## Instructor password
+
+When signed in, choose **Password** at the top of the diary to set or change your password. If signed out, choose **Set or reset password** and follow the reset email. Pupils use the reusable codes you generate; they do not use instructor password recovery.
+
+## Initial upload to GitHub
 
 1. Extract `driving-diary.zip` and open the `driving-diary` folder.
 2. Upload the **contents** to [oarandz/driving](https://github.com/oarandz/driving), on the `main` branch. `index.html` must be at the repository root, not inside another folder.
@@ -15,7 +60,7 @@ GitHub does not extract uploaded ZIPs. Upload the extracted files, not the ZIP i
 
 - Supabase project: `driving-diary`, London, reference `cizbyvqloccdrufioqqt`.
 - Website connection in `config.js`, containing only the public project URL and publishable key.
-- Six database tables, lesson actions and access rules. Row-level security is enabled on every application table; anonymous table reads are not permitted.
+- Application tables, lesson actions and access rules. Row-level security is enabled on every application table; anonymous table reads are not permitted.
 - Private `teaching-resources` storage bucket.
 - Deployed `maps` function, with explicit user and instructor checks.
 - Map function origin: `https://oarandz.github.io`.
@@ -23,17 +68,17 @@ GitHub does not extract uploaded ZIPs. Upload the extracted files, not the ZIP i
 - Additional authentication redirect: `http://127.0.0.1:4173/` for the current local preview. Map requests are restricted to the GitHub website origin.
 - Flat blue L icon for Safari bookmarks and Add to Home Screen.
 
-Do not rerun the initial SQL migration in this project. No pupil records or instructor accounts have been added.
+Do not rerun the initial SQL migration in this project. Instructor access has been enabled for your verified account. The setup did not add pupil records.
 
 ## Still needed
 
 ### Instructor account
 
-Confirm the email address you want to use. Once that email has a verified Supabase Auth account, its user ID needs to be added to the `instructors` table. Until then, signing in does not give access to the diary. The website uses emailed sign-in links, not a password form.
+Your account is verified and instructor access is enabled. After uploading the password update, choose your password as described above. You do not need another account.
 
-### Pupil sign-in emails
+### Instructor password reset emails
 
-Custom SMTP is currently disabled. Configure an email provider in **Supabase → Authentication → Emails → SMTP Settings** before using pupil sign-in. The default Supabase email service has restricted recipients and is not sufficient for general pupil access. Enter provider credentials directly into Supabase, never into the website files or GitHub.
+Custom SMTP is currently disabled. Configure an email provider in **Supabase → Authentication → Emails → SMTP Settings** for reliable instructor password recovery. The default Supabase service has restricted recipients and a small allowance. Pupil access codes do not use email delivery. Enter provider credentials directly into Supabase, never into GitHub.
 
 ### Address search and automatic travel times
 
@@ -43,6 +88,6 @@ Until that is configured, select locations on the map and enter travel allowance
 
 ### Final checks
 
-After publishing and finishing account setup, test instructor sign-in, a pupil's read-only access, one lesson and a teaching-file upload. The application and access rules passed local tests, and the live database protection settings were checked, but real account sign-in and a live iPhone lesson have not yet been tested.
+After publishing and finishing account setup, test instructor sign-in, a pupil's read-only access, one lesson and a teaching-file upload. The application and access rules passed local tests, and the live database protection settings were checked, and the instructor has signed in using the earlier email-link flow. Real password sign-in and a live iPhone lesson still need testing after this update is uploaded.
 
 On iPhone, keep the website open for GPS recording. Reliable recording with the screen locked still requires a separate recorder with GPX import, or a future native companion app.
