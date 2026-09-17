@@ -18,7 +18,7 @@ const money=n=>new Intl.NumberFormat('en-GB',{style:'currency',currency:config.c
 const icon=name=>({diary:'▦',pupils:'◉',resources:'▤',progress:'↗'}[name]||'•');
 function toast(message,error=false){ $('#toast').textContent=message;$('#toast').className=error?'show error':'show';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').className='',6500); }
 function shell(){
- $('#app').innerHTML=`<aside class="sidebar">${config.name?`<span class="brand">${h(config.name)}</span>`:''}<div class="workspace-label">${state.role==='admin'?'INSTRUCTOR WORKSPACE':'PUPIL ACCOUNT'}</div><nav>${(state.role==='admin'?['diary','pupils','resources']:['diary','progress']).map(v=>`<button class="nav-item ${state.view===v?'selected':''}" data-view="${v}"><span>${icon(v)}</span>${v==='diary'?'Lesson diary':v==='resources'?'Teaching library':v==='progress'?'My progress':'Pupils'}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="avatar">${state.role==='admin'?'IN':'AL'}</div><div><strong>${state.role==='admin'?'Instructor':'Pupil account'}</strong><small>${state.demo?'Sample workspace':'Private workspace'}</small></div></div></aside><main><div class="topbar"><span>${dateLabel(today,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span><div>${state.demo?'<span class="demo-pill">PREVIEW · SAMPLE DATA</span> <button class="text-button" id="switch-role">View as '+(state.role==='admin'?'pupil':'instructor')+'</button>':'<button class="text-button" id="account-password">Password</button> <button class="text-button" id="logout">Sign out</button>'}</div></div><div id="content"></div></main>`;
+ $('#app').innerHTML=`<aside class="sidebar">${config.name?`<span class="brand">${h(config.name)}</span>`:''}<div class="workspace-label">${state.role==='admin'?'INSTRUCTOR WORKSPACE':'PUPIL ACCOUNT'}</div><nav>${(state.role==='admin'?['diary','pupils','resources']:['diary','progress']).map(v=>`<button class="nav-item ${state.view===v?'selected':''}" data-view="${v}"><span>${icon(v)}</span>${v==='diary'?'Lesson diary':v==='resources'?'Teaching library':v==='progress'?'My progress':'Pupils'}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="avatar">${state.role==='admin'?'IN':'AL'}</div><div><strong>${state.role==='admin'?'Instructor':'Pupil account'}</strong><small>${state.demo?'Sample workspace':'Private workspace'}</small></div></div></aside><main><div class="topbar"><span>${dateLabel(today,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span><div>${state.demo?'<span class="demo-pill">PREVIEW · SAMPLE DATA</span> <button class="text-button" id="switch-role">View as '+(state.role==='admin'?'pupil':'instructor')+'</button>':`${state.role==='admin'?'<button class="text-button" id="account-password">Password</button> ':''}<button class="text-button" id="logout">Sign out</button>`}</div></div><div id="content"></div></main>`;
  if(pointQueue.length){const pending=document.createElement('div');pending.className='notice warning';pending.innerHTML=`${pointQueue.length} route points are waiting to save. <button id="retry-sync">Retry saving</button>`;$('#content').before(pending);$('#retry-sync').onclick=()=>safely(async()=>{await flushPoints();render();toast('Route points saved.');});}
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render();});
  $('#switch-role')?.addEventListener('click',()=>{state.role=state.role==='admin'?'pupil':'admin';state.view='diary';render();});
@@ -79,7 +79,7 @@ async function openWorkspace(){
  try{
   await rpc('claim_pupil_account',{});
   state.role=(await rpc('is_instructor',{}))?'admin':'pupil';
-  await reloadData();if(state.role==='pupil'){state.pupilId=state.pupils[0]?.id;if(!state.pupilId){authScreen('Your account is not linked to a pupil yet. Ask your instructor to add this email address.');return;}}
+  await reloadData();if(state.role==='pupil'){state.pupilId=state.pupils[0]?.id;if(!state.pupilId){authScreen('Your account is not linked to a pupil yet. Ask your instructor for an access code.');return;}}
   render();registerTools();if(pointQueue.length){toast('Unsynced route points found. Open the active lesson and resume recording to retry saving.',true);}
  }catch(e){authScreen(`Could not open the diary: ${e.message}`);}
 }
@@ -100,9 +100,14 @@ function bindAuthForm(form,action){
   finally{button.disabled=false;}
  };
 }
-function authScreen(message='',mode='signin',email=''){
- const signup=mode==='signup',reset=mode==='reset';
- $('#app').innerHTML=`<div class="auth"><h1>${signup?'Create pupil account':reset?'Set or reset password':'Sign in'}</h1>${signup?'<p class="help">Use the email address your instructor has added for you.</p>':reset?'<p class="help">We will email you a link to choose a password.</p>':''}${message?`<p class="error-message" role="alert">${h(message)}</p>`:''}<form id="sign-in"><label>Email address<input name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" value="${h(email)}" required></label>${reset?'':signup?passwordFields():'<label>Password<input name="password" type="password" autocomplete="current-password" required></label>'}<button type="submit" class="primary">${signup?'Create account':reset?'Send password reset email':'Sign in'}</button><p id="auth-result" role="status" class="help"></p></form>${mode==='signin'?'<button id="forgot-password" class="text-button">Set or reset password</button><button id="create-account" class="text-button">Create pupil account</button>':'<button id="back-signin" class="text-button">Back to sign in</button>'}<button id="clear-session" class="text-button">Use a different account</button></div>`;
+async function pupilAccess(body){
+ const {data,error}=await db.functions.invoke('pupil-access',{body});
+ if(error){let message='Could not complete the request. Please try again.';try{message=(await error.context.json()).error||message;}catch{}throw Error(message);}
+ if(data?.error)throw Error(data.error);return data;
+}
+function authScreen(message='',mode='pupil',email=''){
+ const pupilLogin=mode==='pupil',reset=mode==='reset';
+ $('#app').innerHTML=`<div class="auth"><h1>${pupilLogin?'Pupil sign in':reset?'Set or reset password':'Instructor sign in'}</h1>${pupilLogin?'<p class="help">Use your email and the access code from your instructor.</p>':reset?'<p class="help">We will email you a link to choose your instructor password.</p>':''}${message?`<p class="error-message" role="alert">${h(message)}</p>`:''}<form id="sign-in"><label>Email address<input name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" value="${h(email)}" required></label>${reset?'':pupilLogin?'<label>Access code<input name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required maxlength="40"></label>':'<label>Password<input name="password" type="password" autocomplete="current-password" required></label>'}<button type="submit" class="primary">${reset?'Send password reset email':'Sign in'}</button><p id="auth-result" role="status" class="help"></p></form>${pupilLogin?'<p class="help">If you have lost your code, ask your instructor for a new one.</p><button id="instructor-signin" class="text-button">Instructor sign in</button>':mode==='signin'?'<button id="forgot-password" class="text-button">Set or reset password</button><button id="pupil-signin" class="text-button">Pupil sign in</button>':'<button id="back-signin" class="text-button">Back to instructor sign in</button>'}<button id="clear-session" class="text-button">Use a different account</button></div>`;
  const form=$('#sign-in');
  bindAuthForm(form,async(form,result)=>{
   if(!db)throw Error('Sign-in is unavailable. Reload the page and try again.');
@@ -110,25 +115,27 @@ function authScreen(message='',mode='signin',email=''){
   if(reset){
    const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:redirect});if(error)throw error;
    result.textContent='If an account exists for this email, a password reset link has been sent. Open the newest email once.';
-  }else if(signup){
-   const password=checkPasswords(form);
-   const {data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:redirect}});if(error)throw error;
-   form.elements.password.value='';form.elements.confirm_password.value='';
-   if(data.session){rememberRecovery(false);await openWorkspace();}
-   else result.textContent='Check your email to confirm your account, then sign in with your password. If you already have an account, use Set or reset password.';
+  }else if(pupilLogin){
+   const code=form.elements.code.value.replace(/[\s-]/g,'').toUpperCase();
+   if(!/^[A-HJ-NP-Z2-9]{16}$/.test(code))throw Error('Enter the full access code given by your instructor.');
+   const data=await pupilAccess({action:'login',email,code});
+   const {error}=await db.auth.setSession(data.session);if(error)throw error;
+   form.elements.code.value='';rememberRecovery(false);await openWorkspace();
   }else{
    const {error}=await db.auth.signInWithPassword({email,password:form.elements.password.value});if(error)throw error;
    form.elements.password.value='';rememberRecovery(false);await openWorkspace();
   }
  });
  $('#forgot-password')?.addEventListener('click',()=>authScreen('','reset',form.elements.email.value));
- $('#create-account')?.addEventListener('click',()=>authScreen('','signup',form.elements.email.value));
+ $('#instructor-signin')?.addEventListener('click',()=>authScreen('','signin',form.elements.email.value));
+ $('#pupil-signin')?.addEventListener('click',()=>authScreen('','pupil',form.elements.email.value));
  $('#back-signin')?.addEventListener('click',()=>authScreen('','signin',form.elements.email.value));
  $('#clear-session').onclick=()=>safely(signOut);
 }
 async function passwordScreen(recovery=false){
  const {data:{user},error}=await db.auth.getUser();if(error)throw error;
  if(!user){authScreen('Sign in or request a password reset link first.');return;}
+ if(!(await rpc('is_instructor',{}))){rememberRecovery(false);await openWorkspace();toast('Ask your instructor to replace your access code.');return;}
  const body=`<form id="set-password" class="stack"><label>Email address<input type="email" name="email" autocomplete="username" value="${h(user.email||'')}" readonly></label>${passwordFields()}<button type="submit" class="primary">Save password</button><p role="status" class="help"></p></form>`;
  if(recovery){$('#app').innerHTML=`<div class="auth"><h1>Set password</h1>${body}<button id="cancel-recovery" class="text-button">Back to sign in</button></div>`;$('#cancel-recovery').onclick=()=>safely(signOut);}
  else dialog('Set password',body);
@@ -142,9 +149,34 @@ async function passwordScreen(recovery=false){
 }
 async function signOut(){if(trackingLesson||pointQueue.length){toast('Stop route recording and save its points before signing out.',true);return;}const result=await db?.auth.signOut();if(result?.error)throw result.error;rememberRecovery(false);location.reload();}
 function renderPupils(){
- $('#content').innerHTML=`<div class="heading"><div><h1>Pupils</h1></div><button id="add-pupil" class="primary">＋ Add pupil</button></div><div class="cards">${state.pupils.map(p=>{const total=lessonTotals(state.lessons.filter(l=>l.pupil_id===p.id));return `<article class="panel"><div class="pupil-avatar" style="background:${h(p.colour)}">${h(p.name.split(' ').map(n=>n[0]).slice(0,2).join(''))}</div><h3>${h(p.name)}</h3><p class="muted">${h(p.email)}</p><div class="detail-metrics"><div><strong>${total.hours.toFixed(1)}</strong><span>hours driven</span></div><div><strong>${total.miles.toFixed(1)}</strong><span>miles driven</span></div></div><button data-pupil="${p.id}">View lessons & progress</button></article>`;}).join('')||'<div class="empty">Add your first pupil to start booking lessons.</div>'}</div>`;
- $('#add-pupil').onclick=()=>{dialog('Add pupil',`<form id="pupil-form" class="stack"><label>Full name<input name="name" required maxlength="120"></label><label>Email address<input type="email" name="email" required></label><p class="help">The pupil chooses Create pupil account on the sign-in page, uses this email and sets a password. They confirm their email once, then can only view their own lessons, notes, routes and shared resources.</p><div class="dialog-actions"><button type="submit" class="primary">Add pupil</button></div></form>`);$('#pupil-form').onsubmit=e=>{e.preventDefault();safely(async()=>{const f=new FormData(e.target),p={name:f.get('name').trim(),email:f.get('email').trim().toLowerCase(),colour:['#dcf2d0','#dbeafa','#f5e6ce'][state.pupils.length%3]};if(!p.name)throw Error('Enter a name.');if(state.demo)state.pupils.push({...p,id:crypto.randomUUID()});else{const {error}=await db.from('pupils').insert(p);if(error)throw error;await reloadData();}$('#modal').close();render();toast('Pupil added.');});};};
+ $('#content').innerHTML=`<div class="heading"><div><h1>Pupils</h1></div><button id="add-pupil" class="primary">＋ Add pupil</button></div><div class="cards">${state.pupils.map(p=>{const total=lessonTotals(state.lessons.filter(l=>l.pupil_id===p.id));return `<article class="panel"><div class="pupil-avatar" style="background:${h(p.colour)}">${h(p.name.split(' ').map(n=>n[0]).slice(0,2).join(''))}</div><h3>${h(p.name)}</h3><p class="muted">${h(p.email)}</p><div class="detail-metrics"><div><strong>${total.hours.toFixed(1)}</strong><span>hours driven</span></div><div><strong>${total.miles.toFixed(1)}</strong><span>miles driven</span></div></div><button data-pupil="${p.id}">View lessons & progress</button><button data-manage-pupil="${p.id}" class="text-button">Email & access code</button></article>`;}).join('')||'<div class="empty">Add your first pupil to start booking lessons.</div>'}</div>`;
+ $('#add-pupil').onclick=()=>{dialog('Add pupil',`<form id="pupil-form" class="stack"><label>Full name<input name="name" required maxlength="120"></label><label>Email address<input type="email" name="email" required></label><p class="help">After adding the pupil, open Email & access code to generate their sign-in code. Pupils can only view their own lessons and progress.</p><div class="dialog-actions"><button type="submit" class="primary">Add pupil</button></div></form>`);$('#pupil-form').onsubmit=e=>{e.preventDefault();safely(async()=>{const f=new FormData(e.target),p={name:f.get('name').trim(),email:f.get('email').trim().toLowerCase(),colour:['#dcf2d0','#dbeafa','#f5e6ce'][state.pupils.length%3]};if(!p.name)throw Error('Enter a name.');if(state.demo)state.pupils.push({...p,id:crypto.randomUUID()});else{const {error}=await db.from('pupils').insert(p);if(error)throw error;await reloadData();}$('#modal').close();render();toast('Pupil added.');});};};
+ document.querySelectorAll('[data-manage-pupil]').forEach(b=>b.onclick=()=>managePupil(b.dataset.managePupil));
  document.querySelectorAll('[data-pupil]').forEach(b=>b.onclick=()=>{state.view='progress';state.progressPupil=b.dataset.pupil;renderProgress(b.dataset.pupil);});
+}
+function managePupil(id){
+ const p=state.pupils.find(x=>x.id===id);if(!p||state.role!=='admin')return;
+ dialog(p.name,`<form id="pupil-access-form" class="stack"><label>Email address<input name="email" type="email" required maxlength="320" value="${h(p.email)}" autocomplete="off"></label><p class="help">Pupils use this email with their access code.</p><button type="submit" class="primary">Save email</button><p id="pupil-email-status" role="status" class="help"></p></form><h3 class="section-title">Access code</h3><p class="help">${p.access_issued_at?'A code has been issued. Generate a new one to replace it.':'Generate a code to give this pupil access.'} Codes work until you replace them. Replacing a code also disconnects the previous pupil login from their records.</p><button id="generate-pupil-code">${p.access_issued_at?'Generate new code':'Generate access code'}</button><div id="pupil-code-result" aria-live="polite"></div>`);
+ const form=$('#pupil-access-form');
+ const saveEmail=async()=>{
+  if(!form.reportValidity())throw Error('Enter a valid email address.');const email=form.elements.email.value.trim().toLowerCase();
+  if(email===p.email)return;
+  if(state.demo){if(state.pupils.some(x=>x.id!==id&&x.email===email))throw Error('That email is already assigned to another pupil');p.email=email;}
+  else{await rpc('edit_pupil_email',{p_id:id,p_email:email,p_expected_email:p.email});p.email=email;await reloadData();}
+  $('#pupil-email-status').textContent='Email saved.';if($('#code-email'))$('#code-email').textContent=p.email;render();
+ };
+ form.onsubmit=e=>{e.preventDefault();safely(async()=>{try{await saveEmail();}catch(e){$('#pupil-email-status').textContent=e.message;throw e;}});};
+ $('#generate-pupil-code').onclick=()=>safely(async()=>{
+  const button=$('#generate-pupil-code');button.disabled=true;
+  try{
+   await saveEmail();
+   const result=state.demo?{code:'DEMO-CODE-ONLY-2345',email:p.email}:await pupilAccess({action:'generate',pupil_id:id});
+   if(state.demo)p.access_issued_at=new Date().toISOString();else await reloadData();render();
+   $('#pupil-code-result').innerHTML=`<label class="section-title">${state.demo?'Sample code (preview only)':'New access code'}<input id="new-pupil-code" type="text" readonly value="${h(result.code)}" autocomplete="off"></label><p class="help">Give this code and <span id="code-email">${h(result.email)}</span> to the pupil. Copy it now; it is only shown here once. You can generate a replacement if needed.</p><button id="copy-pupil-code">Copy code</button><p id="copy-code-status" role="status" class="help"></p>`;
+   $('#copy-pupil-code').onclick=async()=>{try{await navigator.clipboard.writeText(result.code);$('#copy-code-status').textContent='Code copied.';}catch{$('#new-pupil-code').select();$('#copy-code-status').textContent='Select and copy the code above.';}};
+   button.textContent='Generate new code';
+  }finally{button.disabled=false;}
+ });
 }
 function locationFields(prefix,label,place){return `<div class="full"><label>${label}<div class="place-search"><input id="${prefix}-label" value="${h(place?.label||'')}" placeholder="Address or postcode" required autocomplete="off"><button type="button" id="${prefix}-find">Find</button></div></label><button type="button" id="${prefix}-map-pick" class="text-button">Select on map</button><div id="${prefix}-results"></div><p class="help" id="${prefix}-chosen">${place?'Location selected':'Enter the location, then search or select a point on the map.'}</p></div>`;}
 async function mapRequest(body){if(state.demo)throw Error('Address search and road travel estimates become available when the map service is connected. Use the sample location buttons to try booking.');const {data,error}=await db.functions.invoke('maps',{body});if(error)throw Error('The map service is unavailable. Check its setup or use a manual travel allowance.');if(data.error)throw Error(data.error);return data;}
