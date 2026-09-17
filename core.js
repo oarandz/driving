@@ -5,7 +5,17 @@ export function addDays(date, days) { const d = new Date(date); d.setDate(d.getD
 export function weekStart(date) { const d = new Date(date); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
 export function minutes(a,b) { return (new Date(b)-new Date(a))/60000; }
 export function lessonTotals(lessons) {
-  return lessons.filter(l=>l.status==='completed').reduce((a,l)=>({hours:a.hours+Math.max(0,minutes(l.started_at,l.ended_at))/60,miles:a.miles+Math.max(0,Number(l.end_mileage)-Number(l.start_mileage))}),{hours:0,miles:0});
+  return lessons.filter(l=>l.status==='completed').reduce((a,l)=>({hours:a.hours+Math.max(0,minutes(l.started_at,l.ended_at))/60,miles:a.miles+lessonMiles(l)}),{hours:0,miles:0});
+}
+export function lessonMiles(lesson){return lesson.route_distance_miles!=null?Math.max(0,Number(lesson.route_distance_miles)):Math.max(0,Number(lesson.end_mileage)-Number(lesson.start_mileage));}
+export function routeMiles(points){
+ let metres=0;const radians=n=>n*Math.PI/180;
+ for(const segment of splitTrack(points))for(let i=1;i<segment.length;i++){
+  const a=segment[i-1],b=segment[i];if(Date.parse(b.recorded_at)<=Date.parse(a.recorded_at))continue;
+  const hav=Math.sin(radians(b.lat-a.lat)/2)**2+Math.cos(radians(a.lat))*Math.cos(radians(b.lat))*Math.sin(radians(b.lng-a.lng)/2)**2;
+  metres+=2*6371008.8*Math.asin(Math.sqrt(Math.min(1,Math.max(0,hav))));
+ }
+ return metres/1609.344;
 }
 export function previousAims(lessons,pupilId,start) {
   return lessons.filter(l=>l.pupil_id===pupilId && l.status==='completed' && new Date(l.starts_at)<new Date(start)).sort((a,b)=>new Date(b.starts_at)-new Date(a.starts_at))[0]?.next_aims || '';
