@@ -1,10 +1,18 @@
 # Upload and remaining setup
 
-## Latest update: YouTube videos and lesson resources
+## Latest update: pupil lesson list and instructor preview
 
-Extract **youtube-resources-update.zip**. Upload **all its contents, including the tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for the Pages deployment, then refresh the website. Upload the extracted files, not the ZIP itself.
+Extract **pupil-view-update.zip**. Upload **all its contents, including the tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for the Pages deployment, then refresh the website. Upload the extracted files, not the ZIP itself.
 
-This is a cumulative update, including pupil access codes, email editing, GPX mileage and editable lesson times. Keep the folders included: the publishing checks use the updated tests and supporting files. Your existing website configuration and icons do not need replacing.
+This package includes the previous YouTube, pupil access and GPX updates. Keep the included folders: the publishing checks use the updated tests and supporting files. This update needs no Supabase changes.
+
+- Pupils open **My lessons** to see their next booked lesson, or **No next lesson booked**, followed by their previous lessons, newest first. Selecting a lesson opens its notes, route and resources. A lesson in progress appears above the next booking.
+- In **Pupils**, choose **View as pupil** on a pupil's card or their lessons/progress profile. You see that pupil's read-only lesson list and progress. The banner identifies the selected pupil.
+- Choose **Back to instructor view** to return to the page you came from. No pupil code is needed, no sign-in credentials are changed, and the pupil is not signed out. Reloading the page returns to your instructor account.
+
+The preview uses your existing instructor session with the pupil interface and selected pupil's records. It does not test the pupil's access code or impersonate their authenticated session.
+
+## YouTube videos and lesson resources
 
 The YouTube database update has already been applied to your Supabase project. No Supabase setup is needed for this update.
 

@@ -4,13 +4,14 @@ Unbranded website for one instructor and read-only pupil accounts. The front end
 
 ## Current status
 
-The website is connected to your Supabase project, `driving-diary` (`cizbyvqloccdrufioqqt`). The database, access rules, private teaching-file bucket and map function are deployed. The website is published at https://oarandz.github.io/driving/. This local package includes YouTube video cards under lesson resources, instructor password sign-in, pupil access codes, email editing, GPX mileage and lesson-time editing. Upload all the extracted contents of the latest update ZIP, including its folders, to install the update. See [UPLOAD-AND-SETUP.md](UPLOAD-AND-SETUP.md) for the remaining steps.
+The website is connected to your Supabase project, `driving-diary` (`cizbyvqloccdrufioqqt`). The database, access rules, private teaching-file bucket and map function are deployed. The website is published at https://oarandz.github.io/driving/. This local package includes a pupil home with the next booking and newest-first lesson history, instructor pupil previews, YouTube video cards under lesson resources, instructor password sign-in, pupil access codes, email editing, GPX mileage and lesson-time editing. Upload all the extracted contents of the latest update ZIP, including its folders, to install the update. See [UPLOAD-AND-SETUP.md](UPLOAD-AND-SETUP.md) for the remaining steps.
 
 Your instructor account is verified and has instructor access. Custom email delivery and the Mapbox token are not configured yet. Pupils sign in with their email and an instructor-issued access code; the instructor uses email and password. The fictional in-memory demo is used only when the Supabase URL in `config.js` is blank.
 
 Included:
 
-- Weekly diary, lesson prices and paid/unpaid status.
+- Weekly instructor diary, lesson prices and paid/unpaid status. Pupils see their next booking and a newest-first list of previous lessons.
+- Instructor **View as pupil** on each pupil card/profile, with a clear return button. The preview displays the pupil interface using the instructor session; it does not change pupil credentials or sign them out.
 - Pickup and drop-off selection before booking; road travel estimates or explicit manual allowances; grey travel blocks; overlap and travel conflict checks.
 - Start/stop lesson, editable booked and actual times, odometer mileage, or completion directly from a GPX recording.
 - All five editable note sections. Objectives inherit the latest previous completed lesson's aims when booking and refresh on starting if not manually edited.
