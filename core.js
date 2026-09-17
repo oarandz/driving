@@ -21,14 +21,44 @@ export function validateBooking(candidate,lessons,before=0,after=0) {
   if(next && minutes(candidate.ends_at,next.starts_at)<after) throw Error(`Allow at least ${after} minutes to reach the following lesson.`);
   return {prev,next};
 }
-export function splitTrack(points) {
-  const segments=[]; let segment=[];
-  for(const p of [...points].sort((a,b)=>new Date(a.recorded_at)-new Date(b.recorded_at))) {
-    if(!Number.isFinite(p.lat)||!Number.isFinite(p.lng)||p.accuracy>100) continue;
-    const prev=segment.at(-1);
-    if(prev && (new Date(p.recorded_at)-new Date(prev.recorded_at)>90000 || p.lesson_id!==prev.lesson_id)) { if(segment.length) segments.push(segment);segment=[]; }
-    segment.push(p);
+export function extractGpxPoints(xml, makeId=()=>crypto.randomUUID()) {
+  if(xml.getElementsByTagName('parsererror').length || xml.documentElement?.localName!=='gpx') throw Error('This is not a valid GPX file.');
+  const points=[]; let skipped=0,total=0;
+  const segments=[...xml.getElementsByTagNameNS('*','trkseg')];
+  for(const segment of segments) {
+    const segmentId=makeId();
+    for(const node of segment.getElementsByTagNameNS('*','trkpt')) {
+      total++;
+      const latitude=node.getAttribute('lat'),longitude=node.getAttribute('lon');
+      const lat=Number(latitude),lng=Number(longitude);
+      const time=node.getElementsByTagNameNS('*','time')[0]?.textContent?.trim();
+      const timestamp=Date.parse(time);
+      if(!latitude?.trim()||!longitude?.trim()||!Number.isFinite(lat)||Math.abs(lat)>90||!Number.isFinite(lng)||Math.abs(lng)>180||!Number.isFinite(timestamp)){skipped++;continue;}
+      points.push({lat,lng,accuracy:0,recorded_at:new Date(timestamp).toISOString(),segment_id:segmentId});
+    }
   }
-  if(segment.length) segments.push(segment); return segments;
+  if(!points.length)throw Error('No GPS track points with valid coordinates and recording times were found in this file. Export the recorded track as GPX.');
+  if(points.length>30000)throw Error('The route is too large. Export it with fewer GPS points.');
+  points.sort((a,b)=>Date.parse(a.recorded_at)-Date.parse(b.recorded_at));
+  return {points,skipped,total};
+}
+export function splitTrack(points) {
+  const groups=new Map(),segments=[];
+  for(const p of points) {
+    if(!Number.isFinite(p.lat)||Math.abs(p.lat)>90||!Number.isFinite(p.lng)||Math.abs(p.lng)>180||p.accuracy>100||!Number.isFinite(Date.parse(p.recorded_at)))continue;
+    const key=JSON.stringify([p.lesson_id||'',p.segment_id||'']);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  for(const group of groups.values()) {
+    let segment=[];
+    for(const p of group.sort((a,b)=>Date.parse(a.recorded_at)-Date.parse(b.recorded_at))) {
+      const previous=segment.at(-1);
+      if(previous&&Date.parse(p.recorded_at)-Date.parse(previous.recorded_at)>90000){segments.push(segment);segment=[];}
+      segment.push(p);
+    }
+    if(segment.length)segments.push(segment);
+  }
+  return segments;
 }
 export const escapeHtml = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

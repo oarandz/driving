@@ -1,5 +1,5 @@
 import {config} from './config.js';
-import {localDate,addDays,weekStart,minutes,lessonTotals,previousAims,validateBooking,splitTrack,escapeHtml as h} from './core.js';
+import {localDate,addDays,weekStart,minutes,lessonTotals,previousAims,validateBooking,splitTrack,extractGpxPoints,escapeHtml as h} from './core.js';
 
 const today=new Date();
 const people=[{id:'p1',name:'Alex Morgan',email:'alex@example.com',colour:'#dcf2d0'},{id:'p2',name:'Jamie Taylor',email:'jamie@example.com',colour:'#dbeafa'},{id:'p3',name:'Sam Wilson',email:'sam@example.com',colour:'#f5e6ce'}];
@@ -169,9 +169,10 @@ function bookLesson(previous=null){
 }
 const noteFields=[['objectives','Lesson objectives'],['improved','What has improved'],['needs_work','What needs more work'],['other','Other'],['next_aims','Aims for next time']];
 async function lessonPoints(id){if(state.demo)return state.points.filter(p=>p.lesson_id===id);let result=[],offset=0;while(true){const {data,error}=await db.from('route_points').select('*').eq('lesson_id',id).order('recorded_at').order('id').range(offset,offset+999);if(error)throw error;result.push(...data);if(data.length<1000)return result;offset+=1000;}}
+let routeMapRequest=0;
 function openLesson(id){
  const l=state.lessons.find(l=>l.id===id);if(!l)return;state.selected=id;const admin=state.role==='admin';
- dialog(pupil(l.pupil_id)?.name||'Lesson',`<div class="row"><div><strong>${dateLabel(l.starts_at,{weekday:'long',day:'numeric',month:'long'})}</strong><p class="help">${clock(l.starts_at)} – ${clock(l.ends_at)} · ${h(l.status)}</p></div><span class="pill">${money(l.fee)} · ${l.paid?'Paid':'Unpaid'}</span></div><p class="help">Pickup: ${h(l.pickup.label)}<br>Drop-off: ${h(l.dropoff.label)}</p>${l.status==='completed'?`<div class="detail-metrics"><div><strong>${(minutes(l.started_at,l.ended_at)/60).toFixed(2)} hrs</strong><span>actual lesson time</span></div><div><strong>${(l.end_mileage-l.start_mileage).toFixed(1)} mi</strong><span>${l.start_mileage} → ${l.end_mileage}</span></div></div>`:''}${admin?`<div class="dialog-actions">${l.travel_source==='review'?'<button id="review-travel">Review travel time</button>':''}${l.status==='scheduled'?'<button id="start-lesson" class="primary lime">▶ Start lesson</button>':''}${l.status==='active'?'<button id="stop-lesson" class="primary">■ Stop lesson</button><button id="record-route">'+(trackingLesson===l.id?'Pause route recording':'Record route')+'</button>':''}<button id="payment">Mark as ${l.paid?'unpaid':'paid'}</button>${l.status==='scheduled'?'<button id="cancel-lesson" class="danger">Cancel lesson</button>':''}</div>`:''}${l.status==='active'?'<p class="route-status" id="route-status">'+h(trackingLesson===id?trackingMessage:'Route recording is not running on this device.')+'</p>':''}<form id="notes" class="stack">${noteFields.map(([key,label])=>admin?`<label>${label}<textarea name="${key}" maxlength="20000">${h(l[key])}</textarea></label>`:`<div><h3>${label}</h3><p class="read-note">${h(l[key]||'No notes added yet.')}</p></div>`).join('')}${admin?'<button type="submit" class="primary">Save lesson notes</button><span class="saved-line" id="notes-status" role="status"></span>':''}</form><h3 class="section-title">Lesson route</h3><p class="help">Recorded GPS trail. Gaps are left where tracking was interrupted.</p><div id="lesson-map" class="map"></div>${admin?'<label class="section-title">Import a GPX route<input type="file" id="import-gpx" accept=".gpx,application/gpx+xml"></label><p class="help">Import a timestamped GPX file recorded during this lesson. Points outside the actual lesson time are excluded.</p>':''}<h3 class="section-title">Resources from this lesson</h3><div id="lesson-resources" class="list"></div>${admin&&l.status==='completed'?'<div class="dialog-actions"><button id="next-lesson" class="primary lime">＋ Book next lesson</button></div>':''}`);
+ dialog(pupil(l.pupil_id)?.name||'Lesson',`<div class="row"><div><strong>${dateLabel(l.starts_at,{weekday:'long',day:'numeric',month:'long'})}</strong><p class="help">${clock(l.starts_at)} – ${clock(l.ends_at)} · ${h(l.status)}</p></div><span class="pill">${money(l.fee)} · ${l.paid?'Paid':'Unpaid'}</span></div><p class="help">Pickup: ${h(l.pickup.label)}<br>Drop-off: ${h(l.dropoff.label)}</p>${l.status==='completed'?`<div class="detail-metrics"><div><strong>${(minutes(l.started_at,l.ended_at)/60).toFixed(2)} hrs</strong><span>actual lesson time</span></div><div><strong>${(l.end_mileage-l.start_mileage).toFixed(1)} mi</strong><span>${l.start_mileage} → ${l.end_mileage}</span></div></div>`:''}${admin?`<div class="dialog-actions">${l.travel_source==='review'?'<button id="review-travel">Review travel time</button>':''}${l.status==='scheduled'?'<button id="start-lesson" class="primary lime">▶ Start lesson</button>':''}${l.status==='active'?'<button id="stop-lesson" class="primary">■ Stop lesson</button><button id="record-route">'+(trackingLesson===l.id?'Pause route recording':'Record route')+'</button>':''}<button id="payment">Mark as ${l.paid?'unpaid':'paid'}</button>${l.status==='scheduled'?'<button id="cancel-lesson" class="danger">Cancel lesson</button>':''}</div>`:''}${l.status==='active'?'<p class="route-status" id="route-status">'+h(trackingLesson===id?trackingMessage:'Route recording is not running on this device.')+'</p>':''}<form id="notes" class="stack">${noteFields.map(([key,label])=>admin?`<label>${label}<textarea name="${key}" maxlength="20000">${h(l[key])}</textarea></label>`:`<div><h3>${label}</h3><p class="read-note">${h(l[key]||'No notes added yet.')}</p></div>`).join('')}${admin?'<button type="submit" class="primary">Save lesson notes</button><span class="saved-line" id="notes-status" role="status"></span>':''}</form><h3 class="section-title" id="route-heading" style="scroll-margin-top:100px">Lesson route</h3><p class="help" id="route-summary">Loading saved route…</p><div id="lesson-map" class="map"></div>${admin&&l.status!=='cancelled'?'<label class="section-title">Upload a GPX route<input type="file" id="import-gpx" accept=".gpx,application/gpx+xml,application/xml,text/xml"></label><p class="help">Choose a recording, check the preview, then save it to this lesson. The full route is kept.</p><div id="route-import-panel" aria-live="polite"></div>':''}<h3 class="section-title">Resources from this lesson</h3><div id="lesson-resources" class="list"></div>${admin&&l.status==='completed'?'<div class="dialog-actions"><button id="next-lesson" class="primary lime">＋ Book next lesson</button></div>':''}`);
  const saveNotes=async()=>{const f=new FormData($('#notes'));const changes=Object.fromEntries(noteFields.map(([key])=>[key,f.get(key)]));if(state.demo){l.objectives_inherited=l.objectives_inherited!==false&&l.objectives===changes.objectives;Object.assign(l,changes);}else{await rpc('save_lesson_notes',{p_id:id,p_notes:changes});await reloadData();}$('#notes-status').textContent='Saved. Your pupil can see these notes.';};
  $('#notes').onsubmit=e=>{e.preventDefault();safely(saveNotes);};
  $('#review-travel')?.addEventListener('click',()=>safely(async()=>{await saveNotes();reviewTravel(id);}));
@@ -180,8 +181,8 @@ function openLesson(id){
  $('#cancel-lesson')?.addEventListener('click',()=>{dialog('Cancel this lesson?',`<p>${h(pupil(l.pupil_id)?.name)} · ${dateLabel(l.starts_at)} at ${clock(l.starts_at)}</p><p class="help">The record and notes are kept. The time becomes available again.</p><div class="dialog-actions"><button id="keep-lesson">Keep lesson</button><button id="confirm-cancel" class="danger">Cancel lesson</button></div>`);$('#keep-lesson').onclick=()=>openLesson(id);$('#confirm-cancel').onclick=()=>safely(async()=>{if(state.demo)l.status='cancelled';else{await rpc('cancel_lesson',{p_id:id});await reloadData();}$('#modal').close();render();toast('Lesson cancelled.');});});
  $('#record-route')?.addEventListener('click',()=>safely(async()=>{await saveNotes();if(trackingLesson===id){await stopTracking();}else await startTracking(id);openLesson(id);}));
  $('#next-lesson')?.addEventListener('click',()=>safely(async()=>{await saveNotes();bookLesson(state.lessons.find(x=>x.id===id));}));
- $('#import-gpx')?.addEventListener('change',e=>{const file=e.target.files[0];if(file)safely(async()=>{await saveNotes();await importGpx(file,l);openLesson(id);});});
- void lessonPoints(id).then(points=>{if(state.selected===id&&$('#lesson-map'))drawMap('lesson-map',points,false,l.pickup);}).catch(e=>toast(e.message,true));
+ $('#import-gpx')?.addEventListener('change',e=>{const file=e.target.files[0];if(file)void previewGpx(file,l);});
+ void showSavedRoute(l).catch(e=>{if(state.selected===id&&$('#route-summary'))$('#route-summary').textContent='Could not load the saved route. Reopen the lesson to retry.';toast(e.message,true);});
  showLessonResources(id);
 }
 function startForm(id){const l=state.lessons.find(x=>x.id===id);dialog('Start lesson',`<form id="start-form" class="stack"><label>Starting mileage<input type="number" name="mileage" min="0" step="0.1" required inputmode="decimal"></label><label><input type="checkbox" name="track">Record this device’s location</label><p class="notice">On iPhone, keep this page open and the screen on for route recording. It may pause when the phone locks or you switch apps. You can also import a route afterwards.</p><div class="dialog-actions"><button type="submit" class="primary lime">Start lesson</button></div></form>`);$('#start-form').onsubmit=e=>{e.preventDefault();safely(async()=>{const f=new FormData(e.target),m=Number(f.get('mileage'));if(state.lessons.some(x=>x.status==='active'&&x.id!==id))throw Error('Stop the current lesson before starting another.');if(state.demo){if(l.objectives_inherited!==false){const aims=previousAims(state.lessons,l.pupil_id,l.starts_at);if(aims)l.objectives=aims;}Object.assign(l,{status:'active',started_at:new Date().toISOString(),start_mileage:m});}else{await rpc('start_lesson',{p_id:id,p_mileage:m});await reloadData();}if(f.get('track'))await startTracking(id);render();openLesson(id);toast('Lesson started.');});};}
@@ -200,16 +201,68 @@ async function flushPoints(){if(flushPoints.running)return flushPoints.running;i
 async function stopTracking(){if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(syncTimer);try{await wakeLock?.release();}catch{}wakeLock=null;trackingLesson=null;await flushPoints();trackingStatus('Route recording stopped and points saved.');}
 document.addEventListener('visibilitychange',()=>{if(trackingLesson){if(document.hidden)trackingStatus('Recording may be paused while this page is hidden.');else{trackingStatus('Page visible again. Waiting for GPS…');navigator.wakeLock?.request('screen').then(lock=>wakeLock=lock).catch(()=>{});}}});
 window.addEventListener('beforeunload',e=>{if(trackingLesson||pointQueue.length){persistQueue();e.preventDefault();e.returnValue='';}});
-async function importGpx(file,l){if(l.status!=='completed')throw Error('Complete the lesson before importing its route.');if(file.size>15*1024*1024)throw Error('Please use a GPX file smaller than 15 MB.');const xml=new DOMParser().parseFromString(await file.text(),'application/xml');if(xml.querySelector('parsererror'))throw Error('This is not a valid GPX file.');const points=[...xml.getElementsByTagNameNS('*','trkpt')].map(p=>({id:crypto.randomUUID(),lesson_id:l.id,lat:Number(p.getAttribute('lat')),lng:Number(p.getAttribute('lon')),accuracy:0,recorded_at:p.getElementsByTagNameNS('*','time')[0]?.textContent})).filter(p=>p.recorded_at&&Number.isFinite(p.lat)&&Math.abs(p.lat)<=90&&Number.isFinite(p.lng)&&Math.abs(p.lng)<=180&&new Date(p.recorded_at)>=new Date(l.started_at)&&new Date(p.recorded_at)<=new Date(l.ended_at));if(!points.length)throw Error('No timestamped points fall within this lesson’s actual start and stop times.');if(points.length>30000)throw Error('The route is too large. Export it with fewer GPS points.');if(state.demo)state.points.push(...points);else await rpc('import_lesson_route',{p_id:l.id,p_points:points.map(({id,lesson_id,...p})=>p)});toast(`${points.length} route points imported.`);}
+function routePeriod(points){return `${dateLabel(points[0].recorded_at,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} – ${dateLabel(points.at(-1).recorded_at,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}`;}
+async function showSavedRoute(lesson,success=''){
+ const request=++routeMapRequest;
+ const points=await lessonPoints(lesson.id);
+ if(request!==routeMapRequest||state.selected!==lesson.id||!$('#lesson-map'))return;
+ drawMap('lesson-map',points,false,lesson.pickup);
+ $('#route-summary').textContent=points.length?`${success?success+' ':''}Saved route · ${points.length} GPS points · ${routePeriod(points)}${lesson.route_file_name?' · '+lesson.route_file_name:''}`:'No route saved yet.';
+}
+async function previewGpx(file,lesson){
+ const request=++routeMapRequest,panel=$('#route-import-panel');
+ panel.textContent='Reading GPX file…';
+ let parsed;
+ try{
+  if(file.size>15*1024*1024)throw Error('Please use a GPX file smaller than 15 MB.');
+  parsed=extractGpxPoints(new DOMParser().parseFromString(await file.text(),'application/xml'));
+  if(request!==routeMapRequest||state.selected!==lesson.id||!panel.isConnected)return;
+  const {points,skipped}=parsed;
+  const begins=Date.parse(lesson.started_at||lesson.starts_at),ends=Date.parse(lesson.ended_at||lesson.ends_at);
+  const outside=points.some(p=>Date.parse(p.recorded_at)<begins||Date.parse(p.recorded_at)>ends);
+  drawMap('lesson-map',points,false,lesson.pickup);
+  $('#route-summary').textContent=`Preview · ${points.length} GPS points · ${routePeriod(points)}`;
+  panel.innerHTML=`<p><strong>${h(file.name)}</strong></p><p class="help">Save to ${h(pupil(lesson.pupil_id)?.name||'this pupil')} · ${dateLabel(lesson.starts_at,{day:'numeric',month:'short',year:'numeric'})} at ${clock(lesson.starts_at)}.</p>${outside?'<p class="notice warning">The recording extends outside the lesson time. Saving will attach the full route to this lesson; lesson hours and mileage will stay unchanged.</p>':''}${skipped?`<p class="notice warning">${skipped} invalid GPS points were skipped.</p>`:''}<div class="dialog-actions"><button type="button" id="cancel-route-import">Cancel</button><button type="button" class="primary" id="save-route-import">Save route to lesson</button></div><p class="help" role="status" id="route-save-status"></p>`;
+  $('#cancel-route-import').onclick=()=>{panel.innerHTML='';$('#import-gpx').value='';void showSavedRoute(lesson).catch(e=>toast(e.message,true));};
+  $('#save-route-import').onclick=async()=>{
+   const save=$('#save-route-import'),cancel=$('#cancel-route-import'),input=$('#import-gpx'),status=$('#route-save-status');
+   if(save.disabled)return;save.disabled=true;cancel.disabled=true;input.disabled=true;status.textContent='Saving route…';
+   try{
+    let inserted;
+    if(state.demo){
+     const known=new Set(state.points.filter(p=>p.lesson_id===lesson.id).map(p=>JSON.stringify([p.recorded_at,p.lat,p.lng])));
+     const additions=points.filter(p=>{const key=JSON.stringify([p.recorded_at,p.lat,p.lng]);if(known.has(key))return false;known.add(key);return true;});
+     state.points.push(...additions.map(p=>({...p,id:crypto.randomUUID(),lesson_id:lesson.id})));inserted=additions.length;
+    }else{
+     try{inserted=await rpc('save_gpx_route',{p_id:lesson.id,p_filename:file.name,p_points:points});}
+     catch(error){if(/save_gpx_route|schema cache/.test(error.message||''))throw Error('The route upload database update is not installed yet. Apply the GPX update, then retry.');throw error;}
+    }
+    lesson.route_file_name=file.name;lesson.route_imported_at=new Date().toISOString();
+    const current=state.lessons.find(l=>l.id===lesson.id);if(current){current.route_file_name=file.name;current.route_imported_at=lesson.route_imported_at;}
+    if(state.selected!==lesson.id||!panel.isConnected)return;
+    panel.innerHTML='';input.value='';
+    const message=inserted===0?'This route was already saved.':'Route saved.';
+    try{await showSavedRoute(lesson,message);}catch{if($('#route-summary'))$('#route-summary').textContent='Route saved. Reopen the lesson to reload the map.';}
+    toast(message);$('#route-heading')?.scrollIntoView({block:'start',behavior:'smooth'});
+   }catch(error){if(status.isConnected){status.textContent=error.message||'The route could not be saved. Try again.';status.className='error-message';}}
+   finally{save.disabled=false;cancel.disabled=false;input.disabled=false;}
+  };
+ }catch(error){
+  if(request!==routeMapRequest||!panel.isConnected)return;
+  panel.innerHTML=`<p class="error-message" role="alert">${h(error.message||'Could not read this GPX file.')}</p>`;
+  $('#import-gpx').value='';
+ }
+}
 function drawMap(target,points,fog=false,fallback=null){
  if(!window.L){$(`#${target}`).innerHTML='<div class="empty">The map could not load. Check your internet connection.</div>';return;}
  if(map)map.remove();map=L.map(target,{scrollWheelZoom:false}).setView(fallback?[fallback.lat,fallback.lng]:[54,-2],fallback?13:5);
  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
  const segments=splitTrack(points);const coordinates=segments.flat().map(p=>[p.lat,p.lng]);
- if(coordinates.length)map.fitBounds(L.latLngBounds(coordinates).pad(.2),{maxZoom:16});else L.popup().setLatLng(map.getCenter()).setContent('No route recorded yet.').openOn(map);
- segments.forEach(segment=>{if(segment.length===1)L.circleMarker([segment[0].lat,segment[0].lng],{radius:4,color:'#32905d'}).addTo(map);else L.polyline(segment.map(p=>[p.lat,p.lng]),{color:'#359d63',weight:4,opacity:.95}).addTo(map);});
+ if(coordinates.length)map.fitBounds(L.latLngBounds(coordinates).pad(.2),{maxZoom:19});else L.popup().setLatLng(map.getCenter()).setContent('No route recorded yet.').openOn(map);
+ segments.forEach(segment=>{if(segment.length===1)L.circleMarker([segment[0].lat,segment[0].lng],{radius:4,color:'#32905d'}).addTo(map);else L.polyline(segment.map(p=>[p.lat,p.lng]),{color:'#246bc7',weight:4,opacity:.95}).addTo(map);});
+ if(!fog&&coordinates.length){const ordered=segments.flat().sort((a,b)=>Date.parse(a.recorded_at)-Date.parse(b.recorded_at));const first=ordered[0],last=ordered.at(-1);L.circleMarker([first.lat,first.lng],{radius:7,color:'#fff',weight:2,fillColor:'#16824a',fillOpacity:1}).bindTooltip('Start').addTo(map);if(ordered.length>1)L.circleMarker([last.lat,last.lng],{radius:7,color:'#fff',weight:2,fillColor:'#142b36',fillOpacity:1}).bindTooltip('Finish').addTo(map);}
  if(fog){const Fog=L.Layer.extend({onAdd(m){this.m=m;this.canvas=L.DomUtil.create('canvas','fog-layer');this.canvas.style.pointerEvents='none';m.getPanes().overlayPane.appendChild(this.canvas);m.on('moveend zoomend resize',this.redraw,this);this.redraw();},onRemove(m){m.off('moveend zoomend resize',this.redraw,this);this.canvas.remove();},redraw(){const m=this.m,s=m.getSize(),c=this.canvas;c.width=s.x;c.height=s.y;L.DomUtil.setPosition(c,m.containerPointToLayerPoint([0,0]));const ctx=c.getContext('2d');ctx.fillStyle='rgba(14,30,41,.86)';ctx.fillRect(0,0,s.x,s.y);ctx.globalCompositeOperation='destination-out';ctx.lineWidth=24;ctx.lineCap='round';ctx.lineJoin='round';segments.forEach(segment=>{ctx.beginPath();segment.forEach((p,i)=>{const q=m.latLngToContainerPoint([p.lat,p.lng]);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y);});ctx.stroke();});ctx.globalCompositeOperation='source-over';}});new Fog().addTo(map);}
- setTimeout(()=>map?.invalidateSize(),100);
+ const drawnMap=map;setTimeout(()=>{if(map===drawnMap){drawnMap.invalidateSize();if(coordinates.length)drawnMap.fitBounds(L.latLngBounds(coordinates).pad(.15),{maxZoom:19});}},100);
 }
 async function renderProgress(id){
  if(state.role==='admin')id=id||state.progressPupil;const p=pupil(id);if(!p)return;const lessons=state.lessons.filter(l=>l.pupil_id===id),totals=lessonTotals(lessons);
