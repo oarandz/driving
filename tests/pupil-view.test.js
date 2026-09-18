@@ -48,3 +48,21 @@ test('pupil accounts cannot enter instructor preview',()=>{
  const h=harness();h.state.role='pupil';h.state.pupilId='p1';h.run("previewPupil('p2');exitPupilPreview()");
  assert.equal(h.state.pupilId,'p1');assert.equal(h.state.role,'pupil');assert.equal(h.state.pupilPreview,null);
 });
+
+test('skill page has 27 instructor controls and pupil ratings are read-only and isolated',()=>{
+ const h=harness();h.state.progressPupil='p2';h.state.view='skills';h.state.skills=[{id:'r1',pupil_id:'p2',skill_id:1,rating:4,updated_at:new Date().toISOString()},{id:'r2',pupil_id:'p1',skill_id:2,rating:3,updated_at:new Date().toISOString()}];
+ h.run('render()');let html=h.nodes.get('#content').html;
+ assert.equal([...html.matchAll(/data-skill="/g)].length,27);assert.match(html,/27\. Independent driving and using a sat nav/);
+ h.run("previewPupil('p2')");h.state.view='skills';h.run('render()');html=h.nodes.get('#content').html;
+ assert.doesNotMatch(html,/<select|data-skill=/);assert.match(html,/4 — Fully independent/);assert.doesNotMatch(html,/3 — Mostly independent/);
+ assert.match(html,/0 — Not introduced/);assert.equal(h.run("activitySummary('p2')"),'');
+});
+test('activity recording excludes demo, instructor, preview and hidden pages; repeated interaction is throttled',async()=>{
+ const h=harness();h.context.activityCalls=[];h.run("rpc=async name=>{activityCalls.push(name);}");
+ h.state.role='pupil';h.state.pupilId='p1';await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,0);
+ h.state.demo=false;h.state.role='admin';await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,0);
+ h.state.role='pupil';h.state.pupilPreview={};await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,0);
+ h.state.pupilPreview=null;h.context.document.hidden=true;await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,0);
+ h.context.document.hidden=false;await h.run('trackPupilActivity()');await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,1);
+ h.run('activityAttemptAt=0');await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,2);
+});

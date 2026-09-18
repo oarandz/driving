@@ -211,4 +211,43 @@ await asUser(reset);assert.equal((await db.query('select * from public.lesson_vi
 await asUser(instructor);assert.equal(await pin(),video);
 await asUser(reset);assert.equal((await db.query('select * from public.lesson_videos')).rows.length,1);
 console.log('PASS: completed-lesson video pins, duplicate prevention, title update, invalid/cancelled targets, reversible unpin, pupil isolation and denied pupil writes');
+
+await db.exec('reset role');
+await db.exec(`create function auth.jwt() returns jsonb language sql stable as $$select jsonb_build_object('session_id',current_setting('request.jwt.session',true))$$;`);
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609180001_pupil_activity_skills.sql',import.meta.url),'utf8'));
+await asUser(instructor);
+const grade=async(id=a,skill=1,rating=3,expected=0)=>(await db.query('select * from public.set_pupil_skill($1,$2,$3,$4)',[id,skill,rating,expected])).rows[0];
+assert.equal((await grade()).rating,3);
+await denied(()=>grade(a,1,4,0)); // stale forms cannot overwrite a newer rating
+assert.equal((await grade(a,1,4,3)).rating,4);
+for(const skill of [0,28,null])await denied(()=>grade(a,skill));
+for(const rating of [-1,5,null])await denied(()=>grade(a,2,rating));
+await denied(()=>grade(unknown));
+await asUser(reset);assert.equal((await db.query('select rating from public.pupil_skill_ratings')).rows[0].rating,4);
+await denied(()=>grade());await denied(()=>db.query('update public.pupil_skill_ratings set rating=0'));
+await asUser(bob);assert.equal((await db.query('select * from public.pupil_skill_ratings')).rows.length,0);
+await asUser(unknown);assert.equal((await db.query('select * from public.pupil_skill_ratings')).rows.length,0);
+await denied(()=>db.query('select public.record_pupil_activity()'));
+await db.exec('reset role;set role anon');await denied(()=>grade());await denied(()=>db.query('select public.record_pupil_activity()'));
+await asUser(reset);
+await db.exec("select set_config('request.jwt.session','aaaaaaaa-1111-1111-1111-111111111111',false)");
+await db.query('select public.record_pupil_activity()');await db.query('select public.record_pupil_activity()');
+assert.equal((await db.query('select * from public.pupil_activity')).rows.length,0);
+await denied(()=>db.query('select * from public.pupil_activity_sessions'));
+await denied(()=>db.query('update public.pupil_activity set visit_count=99'));
+await asUser(instructor);
+const activity=async()=>(await db.query('select * from public.pupil_activity where pupil_id=$1',[a])).rows[0];
+assert.equal(Number((await activity()).sign_in_count),1);assert.equal(Number((await activity()).visit_count),1);
+await db.query('select public.record_pupil_activity()'); // instructor preview must not create activity
+assert.equal((await db.query('select * from public.pupil_activity')).rows.length,1);
+await db.exec('reset role');await db.query("update public.pupil_activity set last_seen_at=now()-interval '31 minutes' where pupil_id=$1",[a]);
+await asUser(reset);await db.query('select public.record_pupil_activity()');
+await asUser(instructor);assert.equal(Number((await activity()).visit_count),2);assert.equal(Number((await activity()).sign_in_count),1);
+await asUser(reset);await db.exec("select set_config('request.jwt.session','aaaaaaaa-2222-2222-2222-222222222222',false)");await db.query('select public.record_pupil_activity()');
+await asUser(instructor);assert.equal(Number((await activity()).sign_in_count),2);assert.equal(Number((await activity()).visit_count),3);
+await asUser(reset);await db.exec("select set_config('request.jwt.session','aaaaaaaa-1111-1111-1111-111111111111',false)");await db.query('select public.record_pupil_activity()');
+await asUser(instructor);assert.equal(Number((await activity()).sign_in_count),2);assert.equal(Number((await activity()).visit_count),3);
+await asUser(alice);await denied(()=>db.query('select public.record_pupil_activity()')); // retired pupil identity
+console.log('PASS: all skill bounds, stale edits, own-pupil read access, denied pupil writes; activity session deduplication, visit gaps, preview exclusion and instructor-only metrics');
+
 await db.close();

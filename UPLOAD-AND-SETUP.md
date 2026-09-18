@@ -1,10 +1,36 @@
 # Upload and remaining setup
 
-## Latest update: pupil lesson list and instructor preview
+## Latest update: pupil activity and driving skills
 
-Extract **pupil-view-update.zip**. Upload **all its contents, including the tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for the Pages deployment, then refresh the website. Upload the extracted files, not the ZIP itself.
+**The Supabase update has already been applied. No further Supabase changes are needed.**
 
-This package includes the previous YouTube, pupil access and GPX updates. Keep the included folders: the publishing checks use the updated tests and supporting files. This update needs no Supabase changes.
+The new migration is `supabase/migrations/202609180001_pupil_activity_skills.sql`. It has been run successfully in the existing driving-diary project. Do not rerun it or earlier migrations. It adds skill ratings, instructor-only activity summaries, private session deduplication and permission-checked actions.
+
+After the database update, extract **skills-activity-update.zip** and upload **all contents, including tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for Pages deployment, then refresh. Upload the extracted files, not the ZIP itself. This package includes all previous updates.
+
+### Driving skills
+
+Choose **Pupils → Driving skills** for a pupil, or **Grade driving skills** from their lessons/progress profile. Each of the 27 DVSA skills has a rating that saves immediately when changed:
+
+- 0 — Not introduced
+- 1 — Always prompted
+- 2 — Often prompted
+- 3 — Mostly independent
+- 4 — Fully independent
+
+The skill names follow the official DVSA learning-to-drive record. These numbers and descriptions are your custom scale, not DVSA's official five levels. Each saved rating shows its update date/time. Failed saves keep the previous value and display an error. A stale edit cannot silently replace a newer rating.
+
+Pupils see their ratings under **My progress → View driving skills**. They cannot change them. Your **View as pupil** preview also shows the ratings.
+
+### Account activity
+
+The pupil cards and their progress profiles show **Sign-ins recorded**, **Visits** and **Last active**. Choose **Refresh activity** on Pupils to load the latest figures.
+
+Tracking begins when the pupil opens the updated website. It does not reconstruct earlier usage. A sign-in is counted once per authenticated session when first seen by the updated app, including an existing session on its first tracked use. Refreshes, token refreshes and switching tabs within the same session do not add sign-ins. A visit starts after 30 minutes without recorded activity or when a new sign-in session is seen.
+
+Last active records page opens and pointer, keyboard, scroll or return-to-tab activity, at most once every 30 seconds. It is an approximate activity indicator, not proof that particular notes were read. Hidden tabs, the demo and instructor previews do not record activity. No browsing history, IP addresses or device fingerprints are collected. If a request fails, it is retried on later interaction without blocking the pupil. Activity totals remain attached to the pupil when their code is reset.
+
+## Pupil lesson list and instructor preview
 
 - Pupils open **My lessons** to see their next booked lesson, or **No next lesson booked**, followed by their previous lessons, newest first. Selecting a lesson opens its notes, route and resources. A lesson in progress appears above the next booking.
 - In **Pupils**, choose **View as pupil** on a pupil's card or their lessons/progress profile. You see that pupil's read-only lesson list and progress. The banner identifies the selected pupil.

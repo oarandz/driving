@@ -4,11 +4,14 @@ Unbranded website for one instructor and read-only pupil accounts. The front end
 
 ## Current status
 
-The website is connected to your Supabase project, `driving-diary` (`cizbyvqloccdrufioqqt`). The database, access rules, private teaching-file bucket and map function are deployed. The website is published at https://oarandz.github.io/driving/. This local package includes a pupil home with the next booking and newest-first lesson history, instructor pupil previews, YouTube video cards under lesson resources, instructor password sign-in, pupil access codes, email editing, GPX mileage and lesson-time editing. Upload all the extracted contents of the latest update ZIP, including its folders, to install the update. See [UPLOAD-AND-SETUP.md](UPLOAD-AND-SETUP.md) for the remaining steps.
+The website is connected to your Supabase project, `driving-diary` (`cizbyvqloccdrufioqqt`). The database, access rules, private teaching-file bucket and map function are deployed. The website is published at https://oarandz.github.io/driving/. The activity/skills migration has been applied successfully to the live project. This local package includes 27 DVSA skill ratings and instructor-only pupil activity summaries, a pupil home with the next booking and newest-first lesson history, instructor pupil previews, YouTube video cards under lesson resources, instructor password sign-in, pupil access codes, email editing, GPX mileage and lesson-time editing. Upload all the extracted contents of the latest update ZIP, including its folders, to install the update. See [UPLOAD-AND-SETUP.md](UPLOAD-AND-SETUP.md) for the remaining steps.
 
 Your instructor account is verified and has instructor access. Custom email delivery and the Mapbox token are not configured yet. Pupils sign in with their email and an instructor-issued access code; the instructor uses email and password. The fictional in-memory demo is used only when the Supabase URL in `config.js` is blank.
 
 Included:
+
+- Instructor-editable ratings for 27 DVSA driving skills using a custom 0–4 scale; pupils read their own ratings.
+- Pupil sign-in session counts, visits and last activity, visible only to the instructor. Tracking excludes the demo, hidden pages and instructor previews.
 
 - Weekly instructor diary, lesson prices and paid/unpaid status. Pupils see their next booking and a newest-first list of previous lessons.
 - Instructor **View as pupil** on each pupil card/profile, with a clear return button. The preview displays the pupil interface using the instructor session; it does not change pupil credentials or sign them out.
@@ -28,7 +31,7 @@ The instructions below describe a fresh installation. **Do not run the initial m
 ### 1. Supabase
 
 1. Create a fresh Supabase project.
-2. In SQL Editor, run the files in `supabase/migrations/` in filename order, once each. The initial migration creates the tables, access rules, lesson actions and private storage bucket. Subsequent updates add full-recording GPX uploads, editing lesson times, GPS mileage and optional completion from GPX. The fifth migration adds pupil email editing and code activation. The sixth adds instructor-managed YouTube pins with pupil access restricted to their own lessons. See UPLOAD-AND-SETUP.md for live deployment status.
+2. In SQL Editor, run the files in `supabase/migrations/` in filename order, once each. The initial migration creates the tables, access rules, lesson actions and private storage bucket. Subsequent updates add full-recording GPX uploads, editing lesson times, GPS mileage and optional completion from GPX. The fifth migration adds pupil email editing and code activation. The sixth adds instructor-managed YouTube pins with pupil access restricted to their own lessons. The seventh adds pupil skill ratings and account activity. See UPLOAD-AND-SETUP.md for live deployment status.
 3. Set up email authentication and a mail provider in Supabase. The default development email service is restricted; configure custom SMTP for instructor password reset emails. Pupil code sign-in and account creation do not send email. Keep instructor email confirmation enabled.
 4. In Authentication → Users, create your own user. Copy its user ID and run the following, replacing the example:
 
@@ -130,3 +133,5 @@ Lesson-time edits were tested for scheduled, active and completed lessons, trave
 Pupil access tests cover instructor-only generation, random code format, activation races, retired login access, pupil isolation, email validation/duplicates, rate limiting, and client session handling. Live probes check CORS and anonymous rejection; first real pupil code generation and successful sign-in should be checked after the frontend upload.
 
 YouTube checks cover accepted link formats, invalid and spoofed URLs, completed-lesson pins, duplicate prevention, title updates, reversible unpinning and pupil read-only isolation. Browser checks covered thumbnail previews, pinning a sample video and the pupil view. The YouTube migration is applied to the live project; upload the frontend update to use it. No real pupil lesson was changed during testing.
+
+Activity and skill tests cover all rating bounds, stale edits, own-pupil read access, denied pupil writes, instructor-only activity metrics, session deduplication, visit gaps and exclusion of instructor previews. Demo browser checks confirmed saved rating feedback and read-only pupil display. Activity tracking starts with the updated website; historical sign-ins are not backfilled. The 27 skill names use the [DVSA learning-to-drive record](https://assets.publishing.service.gov.uk/media/63e216648fa8f50e893514e9/learning-to-drive-record-overall-progress.pdf), Crown copyright, Open Government Licence v3.0. The user-specified 0–4 scale is separate from DVSA's official levels.

@@ -85,3 +85,18 @@ export function youtubeVideoId(value){
  if(!/^[A-Za-z0-9_-]{11}$/.test(id||''))throw Error('Use a link to a YouTube video, rather than a channel or playlist.');
  return id;
 }
+
+// DVSA learning-to-drive record, Crown copyright, Open Government Licence v3.0.
+// https://www.gov.uk/government/publications/keep-a-record-of-your-pupils-driving-lessons
+// The 0–4 scale below is the instructor's custom scale, not DVSA's five levels.
+export const skillLevels=['Not introduced','Always prompted','Often prompted','Mostly independent','Fully independent'];
+export const drivingSkillGroups=[
+ {name:'Basics',skills:['Legal responsibilities','Safety checks','Cockpit checks','Security']},
+ {name:'Control and positioning',skills:['Controls and instruments','Moving away and stopping','Safe positioning']},
+ {name:'Observation, signalling and planning',skills:['Mirrors – vision and use','Signals','Anticipation and planning','Use of speed','Other traffic','Fuel-efficient driving']},
+ {name:'Junctions, roundabouts and crossings',skills:['Junctions','Roundabouts','Pedestrian crossings']},
+ {name:'Manoeuvres',skills:['Reversing','Turning the car around','Parking','Emergency stop']},
+ {name:'Road types',skills:['Country roads','Dual carriageways','Motorways']},
+ {name:'Driving conditions',skills:['Driving in the dark','Weather conditions','Passengers and loads']},
+ {name:'Following routes',skills:['Independent driving and using a sat nav']}
+];
