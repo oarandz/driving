@@ -49,13 +49,24 @@ test('pupil accounts cannot enter instructor preview',()=>{
  assert.equal(h.state.pupilId,'p1');assert.equal(h.state.role,'pupil');assert.equal(h.state.pupilPreview,null);
 });
 
-test('skill page has 27 instructor controls and pupil ratings are read-only and isolated',()=>{
- const h=harness();h.state.progressPupil='p2';h.state.view='skills';h.state.skills=[{id:'r1',pupil_id:'p2',skill_id:1,rating:4,updated_at:new Date().toISOString()},{id:'r2',pupil_id:'p1',skill_id:2,rating:3,updated_at:new Date().toISOString()}];
+test('detailed skills have 36 collapsed headings, 664 ratings and read-only pupil detail',()=>{
+ const h=harness();h.state.progressPupil='p2';h.state.view='skills';h.state.detailSkills=[{id:'r1',pupil_id:'p2',category_id:1,item_id:1,rating:4,updated_at:new Date().toISOString()},{id:'r2',pupil_id:'p1',category_id:1,item_id:2,rating:3,updated_at:new Date().toISOString()}];
+ h.state.skills=[{id:'old',pupil_id:'p2',skill_id:1,rating:2,updated_at:new Date().toISOString()}];
  h.run('render()');let html=h.nodes.get('#content').html;
- assert.equal([...html.matchAll(/data-skill="/g)].length,27);assert.match(html,/skill-row skill-level-4/);assert.match(html,/<progress max="108" value="4"/);assert.match(html,/27\. Independent driving and using a sat nav/);
+ assert.equal([...html.matchAll(/data-detail-skill="/g)].length,664);assert.equal([...html.matchAll(/data-category="/g)].length,36);
+ assert.doesNotMatch(html,/<details[^>]+ open/);assert.match(html,/skill-row skill-level-4/);assert.match(html,/<progress max="2656" value="4"/);assert.match(html,/36.12 Understanding that passing the test is not the end of learning/);
+ assert.match(html,/Previous 27-skill ratings/);
  h.run("previewPupil('p2')");h.state.view='skills';h.run('render()');html=h.nodes.get('#content').html;
- assert.doesNotMatch(html,/<select|data-skill=/);assert.match(html,/4 — Fully independent/);assert.doesNotMatch(html,/3 — Mostly independent/);
+ assert.doesNotMatch(html,/<select|data-detail-skill=/);assert.match(html,/4 — Fully independent/);assert.doesNotMatch(html,/3 — Mostly independent/);
  assert.match(html,/0 — Not introduced/);assert.equal(h.run("activitySummary('p2')"),'');
+});
+test('lesson core skill pins preserve scores until explicitly updated',async()=>{
+ const h=harness();h.context.crypto={randomUUID:()=>String(Math.random())};h.state.lessons=[lesson('complete','p2',-1,'completed')];h.state.detailSkills=[{pupil_id:'p2',category_id:1,item_id:1,rating:2}];
+ await h.run("saveLessonSkillPin('complete',1)");assert.equal(h.state.skillPins[0].points,2);assert.equal(h.state.skillPins[0].item_count,16);
+ h.state.detailSkills[0].rating=4;await h.run("saveLessonSkillPin('complete',1)");assert.equal(h.state.skillPins[0].points,2);
+ await h.run("saveLessonSkillPin('complete',1,true)");assert.equal(h.state.skillPins[0].points,4);assert.equal(h.state.skillPins.length,1);
+ h.state.role='pupil';h.state.pupilId='p2';await assert.rejects(h.run("saveLessonSkillPin('complete',1,true)"));
+ h.run("openLesson('complete')");assert.match(h.nodes.get('#lesson-skills').html,/Saved score: 0.25 \/ 4/);assert.doesNotMatch(h.nodes.get('#lesson-skills').html,/Unpin|Update saved/);
 });
 test('activity recording excludes demo, instructor, preview and hidden pages; repeated interaction is throttled',async()=>{
  const h=harness();h.context.activityCalls=[];h.run("rpc=async name=>{activityCalls.push(name);}");

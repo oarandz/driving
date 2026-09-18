@@ -250,4 +250,30 @@ await asUser(instructor);assert.equal(Number((await activity()).sign_in_count),2
 await asUser(alice);await denied(()=>db.query('select public.record_pupil_activity()')); // retired pupil identity
 console.log('PASS: all skill bounds, stale edits, own-pupil read access, denied pupil writes; activity session deduplication, visit gaps, preview exclusion and instructor-only metrics');
 
+
+await db.exec('reset role');
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609180002_detailed_skills.sql',import.meta.url),'utf8'));
+await asUser(instructor);
+const detail=async(category=1,item=1,rating=3,expected=0)=>(await db.query('select * from public.set_pupil_detail_rating($1,$2,$3,$4,$5)',[a,category,item,rating,expected])).rows[0];
+assert.equal((await detail()).rating,3);await denied(()=>detail(1,1,4,0));
+for(const args of [[0,1],[37,1],[1,17],[5,38],[36,13],[1,0],[1,1,5],[1,1,-1]])await denied(()=>detail(...args));
+assert.equal((await detail(5,37)).rating,3);assert.equal((await detail(36,12)).rating,3);
+const skillPin=async(refresh=false)=>(await db.query('select * from public.pin_lesson_skill($1,1,$2)',[first,refresh])).rows[0];
+const detailSnapshot=await skillPin();assert.equal(detailSnapshot.points,3);assert.equal(detailSnapshot.item_count,16);
+await detail(1,1,4,3);assert.equal((await skillPin()).points,3);assert.equal((await skillPin(true)).points,4);
+assert.equal((await db.query('select * from public.lesson_skill_pins')).rows.length,1);
+await denied(()=>db.query('select public.pin_lesson_skill($1,1)',[second])); // cancelled
+await denied(()=>db.query('select public.pin_lesson_skill($1,37)',[first]));
+assert.equal((await db.query('select rating from public.pupil_skill_ratings where pupil_id=$1',[a])).rows[0].rating,4); // old grades preserved
+await asUser(reset);assert.equal((await db.query('select * from public.pupil_detail_ratings')).rows.length,3);
+assert.equal((await db.query('select points from public.lesson_skill_pins')).rows[0].points,4);
+await denied(()=>detail());await denied(()=>skillPin());await denied(()=>db.query('select public.unpin_lesson_skill($1)',[detailSnapshot.id]));
+await denied(()=>db.query('update public.pupil_detail_ratings set rating=4'));await denied(()=>db.query('update public.lesson_skill_pins set points=64'));
+for(const user of [bob,unknown]){await asUser(user);assert.equal((await db.query('select * from public.pupil_detail_ratings')).rows.length,0);assert.equal((await db.query('select * from public.lesson_skill_pins')).rows.length,0);}
+await db.exec('reset role;set role anon');await denied(()=>detail());await denied(()=>skillPin());
+await asUser(instructor);await db.query('select public.unpin_lesson_skill($1)',[detailSnapshot.id]);
+await asUser(reset);assert.equal((await db.query('select * from public.lesson_skill_pins')).rows.length,0);
+await asUser(instructor);assert.equal((await skillPin()).id,detailSnapshot.id);assert.equal((await skillPin()).points,4);
+console.log('PASS: detailed syllabus bounds, preserved old grades, stale edits, read-only own-pupil access, immutable lesson snapshots, explicit refresh, reversible unpin and cancelled lesson rejection');
+
 await db.close();

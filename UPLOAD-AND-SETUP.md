@@ -1,30 +1,30 @@
 # Upload and remaining setup
 
-## Latest update: skill colours and percentage progress
+## Latest update: detailed skills and lesson skill pins
 
 **The Supabase update has already been applied. No further Supabase changes are needed.**
 
-The new migration is `supabase/migrations/202609180001_pupil_activity_skills.sql`. It has been run successfully in the existing driving-diary project. Do not rerun it or earlier migrations. It adds skill ratings, instructor-only activity summaries, private session deduplication and permission-checked actions.
+Extract **detailed-skills-update.zip** and upload **all contents, including tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for Pages deployment, then refresh. Upload the extracted files, not the ZIP itself. This package includes all previous updates.
 
-Extract **skill-progress-update.zip** and upload **all contents, including tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for Pages deployment, then refresh. Upload the extracted files, not the ZIP itself. This package includes all previous updates.
+### Detailed ratings
 
-Skill rows are colour coded: **0 grey, 1 red, 2 orange, 3 light green, 4 dark green**. Both instructor and pupil views show the same percentage progress bar. It appears on instructor pupil cards, the progress profile and the skills screen. Colours and percentage update after a rating saves successfully.
+Your supplied syllabus contains **36 core headings and 664 individually gradable items**. Open **Pupils → Driving skills**, select a heading and grade its items using the existing 0–4 scale. Changes save immediately, with the existing grey/red/orange/light green/dark green colours. Use **Find a skill** to filter headings and individual items, or **Refresh ratings** to load changes made on another device.
 
-The percentage is the sum of the 27 ratings divided by 108 (27 × 4), shown to one decimal place when needed. Skills without a rating count as 0. All skills rated 2 gives 50%; all rated 4 gives 100%. This update needs no additional Supabase changes.
+Pupils see the overall percentage and a compact grid of collapsed core headings. Each heading has its own percentage, average out of 4 and count of fully independent items. Selecting a heading reveals the read-only detail. Search works in both views.
 
-### Driving skills
+Each item contributes equally to overall progress: total ratings divided by **2,656** (664 × 4). Ungraded items count as 0. All items rated 4 gives 100%; the display never rounds up to 100% before that. A core heading's score is the average of its own detailed items.
 
-Choose **Pupils → Driving skills** for a pupil, or **Grade driving skills** from their lessons/progress profile. Each of the 27 DVSA skills has a rating that saves immediately when changed:
+**Existing 27-skill ratings are preserved** under **Previous 27-skill ratings** when present. They are kept separately for reference and are not copied to the new detailed items. New items begin at 0, so the new progress percentage starts afresh.
 
-- 0 — Not introduced
-- 1 — Always prompted
-- 2 — Often prompted
-- 3 — Mostly independent
-- 4 — Fully independent
+### Pin core skills to lessons
 
-The skill names follow the official DVSA learning-to-drive record. These numbers and descriptions are your custom scale, not DVSA's official five levels. Each saved rating shows its update date/time. Failed saves keep the previous value and display an error. A stale edit cannot silently replace a newer rating.
+Open a lesson, including a completed lesson, and find **Skills worked on → Pin a core skill**. Choose a heading and select **Pin skill to lesson**. Pin multiple core headings if required.
 
-Pupils see their ratings under **My progress → View driving skills**. They cannot change them. Your **View as pupil** preview also shows the ratings.
+The lesson summary shows each heading's number, title and saved average out of 4, plus the points and date/time it was saved. The server calculates the score from that pupil's detailed ratings when pinned. **Later changes to ratings do not change earlier lesson summaries.** Pinning an already-pinned heading again does not change its saved score. Choose **Update saved score** to explicitly replace it with the current score. This is the score when pinned, not an inferred rating from the historical lesson date.
+
+**Unpin skill** hides the pin from the pupil while preserving its record. Pinning it again restores it with a fresh score. Cancelled lessons cannot receive new pins. Pupils can only read their own lesson pins. Pinning does not discard unsaved lesson notes.
+
+The applied migration is `supabase/migrations/202609180002_detailed_skills.sql`. Do not rerun it or earlier migrations in the configured project.
 
 ### Account activity
 

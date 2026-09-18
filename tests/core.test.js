@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {previousAims,validateBooking,lessonTotals,lessonMiles,routeMiles,splitTrack,weekStart,localDate,skillProgress} from '../core.js';
+import {previousAims,validateBooking,lessonTotals,lessonMiles,routeMiles,splitTrack,weekStart,localDate,skillProgress,detailSkillProgress,detailedSkillGroups} from '../core.js';
 const lesson=(id,start,end,extra={})=>({id,pupil_id:'a',starts_at:`2026-09-16T${start}:00Z`,ends_at:`2026-09-16T${end}:00Z`,status:'scheduled',...extra});
 test('objectives come from latest earlier completed lesson for the same pupil',()=>{
  const lessons=[lesson('1','08:00','09:00',{status:'completed',next_aims:'Mirrors'}),lesson('2','09:00','10:00',{status:'completed',next_aims:'Roundabouts'}),lesson('3','10:00','11:00',{status:'completed',next_aims:'Wrong pupil',pupil_id:'b'}),lesson('4','16:00','17:00',{status:'completed',next_aims:'Future'})];
@@ -58,4 +58,13 @@ test('skill progress uses all 108 available points and only the selected pupil',
  assert.equal(skillProgress(almost,'a').percent,99.1);
  assert.equal(skillProgress([...grades(4),{pupil_id:'b',skill_id:1,rating:4}],'b').percent,3.7);
  assert.equal(skillProgress(grades(4).slice(0,1),'a').points,4);
+});
+
+test('detailed syllabus includes all 664 items and progress cannot round up to completion early',()=>{
+ assert.equal(detailedSkillGroups.length,36);assert.equal(detailedSkillGroups.reduce((n,g)=>n+g.skills.length,0),664);
+ const ratings=detailedSkillGroups.flatMap(g=>g.skills.map((_,i)=>({pupil_id:'a',category_id:g.id,item_id:i+1,rating:4})));
+ assert.equal(detailSkillProgress([],'a').maximum,2656);assert.equal(detailSkillProgress(ratings,'a').percent,100);
+ ratings.at(-1).rating=3;assert.equal(detailSkillProgress(ratings,'a').percent,99.9);
+ assert.equal(detailSkillProgress(ratings,'b').points,0);assert.equal(detailSkillProgress(ratings,'a',1).maximum,64);
+ assert.equal(detailSkillProgress([{pupil_id:'a',category_id:1,item_id:1,rating:4}],'a',1).average,.25);
 });
