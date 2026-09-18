@@ -1,12 +1,16 @@
 # Upload and remaining setup
 
-## Latest update: pupil activity and driving skills
+## Latest update: skill colours and percentage progress
 
 **The Supabase update has already been applied. No further Supabase changes are needed.**
 
 The new migration is `supabase/migrations/202609180001_pupil_activity_skills.sql`. It has been run successfully in the existing driving-diary project. Do not rerun it or earlier migrations. It adds skill ratings, instructor-only activity summaries, private session deduplication and permission-checked actions.
 
-After the database update, extract **skills-activity-update.zip** and upload **all contents, including tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for Pages deployment, then refresh. Upload the extracted files, not the ZIP itself. This package includes all previous updates.
+Extract **skill-progress-update.zip** and upload **all contents, including tests and supabase folders**, to the root of [oarandz/driving](https://github.com/oarandz/driving), replacing matching files. Commit to `main`, wait for Pages deployment, then refresh. Upload the extracted files, not the ZIP itself. This package includes all previous updates.
+
+Skill rows are colour coded: **0 grey, 1 red, 2 orange, 3 light green, 4 dark green**. Both instructor and pupil views show the same percentage progress bar. It appears on instructor pupil cards, the progress profile and the skills screen. Colours and percentage update after a rating saves successfully.
+
+The percentage is the sum of the 27 ratings divided by 108 (27 × 4), shown to one decimal place when needed. Skills without a rating count as 0. All skills rated 2 gives 50%; all rated 4 gives 100%. This update needs no additional Supabase changes.
 
 ### Driving skills
 

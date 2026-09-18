@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {previousAims,validateBooking,lessonTotals,lessonMiles,routeMiles,splitTrack,weekStart,localDate} from '../core.js';
+import {previousAims,validateBooking,lessonTotals,lessonMiles,routeMiles,splitTrack,weekStart,localDate,skillProgress} from '../core.js';
 const lesson=(id,start,end,extra={})=>({id,pupil_id:'a',starts_at:`2026-09-16T${start}:00Z`,ends_at:`2026-09-16T${end}:00Z`,status:'scheduled',...extra});
 test('objectives come from latest earlier completed lesson for the same pupil',()=>{
  const lessons=[lesson('1','08:00','09:00',{status:'completed',next_aims:'Mirrors'}),lesson('2','09:00','10:00',{status:'completed',next_aims:'Roundabouts'}),lesson('3','10:00','11:00',{status:'completed',next_aims:'Wrong pupil',pupil_id:'b'}),lesson('4','16:00','17:00',{status:'completed',next_aims:'Future'})];
@@ -47,4 +47,15 @@ test('GPS mileage replaces rather than adds to odometer miles in completed pupil
  assert.equal(lessonMiles({...log,route_distance_miles:0}),0);
  assert.equal(lessonTotals([{...log,status:'scheduled'}]).miles,0);
  assert.equal(lessonMiles({...log,route_distance_miles:null}),30);
+});
+
+test('skill progress uses all 108 available points and only the selected pupil',()=>{
+ const grades=rating=>Array.from({length:27},(_,i)=>({pupil_id:'a',skill_id:i+1,rating}));
+ assert.deepEqual(skillProgress([],'a'),{points:0,maximum:108,percent:0});
+ assert.equal(skillProgress(grades(2),'a').percent,50);
+ assert.equal(skillProgress(grades(4),'a').percent,100);
+ const almost=grades(4);almost[26].rating=3;
+ assert.equal(skillProgress(almost,'a').percent,99.1);
+ assert.equal(skillProgress([...grades(4),{pupil_id:'b',skill_id:1,rating:4}],'b').percent,3.7);
+ assert.equal(skillProgress(grades(4).slice(0,1),'a').points,4);
 });

@@ -10,7 +10,7 @@ Your instructor account is verified and has instructor access. Custom email deli
 
 Included:
 
-- Instructor-editable ratings for 27 DVSA driving skills using a custom 0–4 scale; pupils read their own ratings.
+- Instructor-editable ratings for 27 DVSA driving skills using a custom 0–4 scale; pupils read their own ratings. Entire skill rows use grey/red/orange/light green/dark green for levels 0–4. Shared progress bars calculate points out of 108, so all skills rated 4 is 100%.
 - Pupil sign-in session counts, visits and last activity, visible only to the instructor. Tracking excludes the demo, hidden pages and instructor previews.
 
 - Weekly instructor diary, lesson prices and paid/unpaid status. Pupils see their next booking and a newest-first list of previous lessons.

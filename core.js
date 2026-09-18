@@ -100,3 +100,9 @@ export const drivingSkillGroups=[
  {name:'Driving conditions',skills:['Driving in the dark','Weather conditions','Passengers and loads']},
  {name:'Following routes',skills:['Independent driving and using a sat nav']}
 ];
+
+export function skillProgress(ratings,pupilId){
+ const bySkill=new Map(ratings.filter(r=>r.pupil_id===pupilId&&Number.isInteger(r.skill_id)&&r.skill_id>=1&&r.skill_id<=27&&Number.isInteger(r.rating)&&r.rating>=0&&r.rating<=4).map(r=>[r.skill_id,r.rating]));
+ const points=[...bySkill.values()].reduce((sum,rating)=>sum+rating,0);
+ return {points,maximum:108,percent:Math.round(points/108*1000)/10};
+}

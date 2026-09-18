@@ -52,7 +52,7 @@ test('pupil accounts cannot enter instructor preview',()=>{
 test('skill page has 27 instructor controls and pupil ratings are read-only and isolated',()=>{
  const h=harness();h.state.progressPupil='p2';h.state.view='skills';h.state.skills=[{id:'r1',pupil_id:'p2',skill_id:1,rating:4,updated_at:new Date().toISOString()},{id:'r2',pupil_id:'p1',skill_id:2,rating:3,updated_at:new Date().toISOString()}];
  h.run('render()');let html=h.nodes.get('#content').html;
- assert.equal([...html.matchAll(/data-skill="/g)].length,27);assert.match(html,/27\. Independent driving and using a sat nav/);
+ assert.equal([...html.matchAll(/data-skill="/g)].length,27);assert.match(html,/skill-row skill-level-4/);assert.match(html,/<progress max="108" value="4"/);assert.match(html,/27\. Independent driving and using a sat nav/);
  h.run("previewPupil('p2')");h.state.view='skills';h.run('render()');html=h.nodes.get('#content').html;
  assert.doesNotMatch(html,/<select|data-skill=/);assert.match(html,/4 — Fully independent/);assert.doesNotMatch(html,/3 — Mostly independent/);
  assert.match(html,/0 — Not introduced/);assert.equal(h.run("activitySummary('p2')"),'');
