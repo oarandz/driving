@@ -276,4 +276,42 @@ await asUser(reset);assert.equal((await db.query('select * from public.lesson_sk
 await asUser(instructor);assert.equal((await skillPin()).id,detailSnapshot.id);assert.equal((await skillPin()).points,4);
 console.log('PASS: detailed syllabus bounds, preserved old grades, stale edits, read-only own-pupil access, immutable lesson snapshots, explicit refresh, reversible unpin and cancelled lesson rejection');
 
+await db.exec('reset role');
+await db.exec(await fs.readFile(new URL('../supabase/migrations/202609180003_ai_skill_review.sql',import.meta.url),'utf8'));
+await asUser(instructor);
+const aiSummary=async(text='Mirrors needed reminders',expected='')=>(await db.query('select * from public.save_lesson_skill_summary($1,$2,$3)',[first,text,expected])).rows[0];
+assert.equal((await aiSummary()).summary,'Mirrors needed reminders');await denied(()=>aiSummary('stale',''));
+await denied(()=>aiSummary('a'.repeat(6001),'Mirrors needed reminders'));
+const batch=async(changes,id=first,pins=[],items=[])=>(await db.query('select public.apply_lesson_skill_ratings($1,$2,$3,$4) as result',[id,JSON.stringify(changes),pins,JSON.stringify(items)])).rows[0].result;
+const c={category_id:9,item_id:6,rating:2,expected:0};
+await denied(()=>batch([c,{category_id:1,item_id:1,rating:3,expected:0}]));
+assert.equal((await db.query('select * from public.pupil_detail_ratings where category_id=9')).rows.length,0);
+await denied(()=>batch([c,c]));await denied(()=>batch([{...c,item_id:99}]));await denied(()=>batch([{...c,rating:2.1}]));await denied(()=>batch([{...c,rating:null}]));
+await denied(()=>batch([c],second));await denied(()=>batch([]));assert.equal((await batch([c],first,[9])).ratings[0].rating,2);
+assert.equal((await db.query('select points from public.lesson_skill_pins where category_id=9')).rows[0].points,2);
+assert.equal((await batch([],first,[19])).pins[0].category_id,19);
+await denied(()=>batch([{...c,rating:3,expected:2}],first,[37]));
+assert.equal((await db.query('select rating from public.pupil_detail_ratings where category_id=9')).rows[0].rating,2);
+const itemPin={category_id:9,item_id:6,title:'Mirror checks before slowing'};
+assert.equal((await batch([],first,[],[itemPin])).detail_pins[0].rating,2);
+await batch([{...c,rating:3,expected:2}],first,[],[itemPin]);
+assert.equal((await db.query('select rating from public.lesson_detail_skill_pins')).rows[0].rating,2); // snapshot preserved
+await db.query('select public.pin_lesson_detail_skill($1,9,6,$2,true)',[first,itemPin.title]);
+assert.equal((await db.query('select rating from public.lesson_detail_skill_pins')).rows[0].rating,3);
+await denied(()=>batch([{...c,rating:4,expected:3}],first,[],[{...itemPin,item_id:99}]));
+assert.equal((await db.query('select rating from public.pupil_detail_ratings where category_id=9')).rows[0].rating,3);
+await asUser(reset);assert.equal((await db.query('select * from public.lesson_detail_skill_pins')).rows.length,1);await denied(()=>db.query('select public.pin_lesson_detail_skill($1,9,6,$2)',[first,itemPin.title]));
+await asUser(bob);assert.equal((await db.query('select * from public.lesson_detail_skill_pins')).rows.length,0);
+await asUser(instructor);
+assert.equal((await skillPin()).points,4); // saved lesson scores do not change
+assert.equal((await db.query('select public.reserve_skill_suggestion($1) as ok',[first])).rows[0].ok,true);
+assert.equal((await db.query('select public.reserve_skill_suggestion($1) as ok',[first])).rows[0].ok,false);
+await denied(()=>db.query('update public.instructor_ai_usage set request_count=0'));
+await db.exec("reset role;update public.instructor_ai_usage set request_count=100,last_requested_at=now()-interval '1 minute'");await asUser(instructor);
+assert.equal((await db.query('select public.reserve_skill_suggestion($1) as ok',[first])).rows[0].ok,false);
+await db.exec("reset role;update public.instructor_ai_usage set usage_day=current_date-1,last_requested_at=now()-interval '1 minute'");await asUser(instructor);
+assert.equal((await db.query('select public.reserve_skill_suggestion($1) as ok',[first])).rows[0].ok,true);
+for(const user of [reset,bob,unknown]){await asUser(user);assert.equal((await db.query('select * from public.lesson_skill_reviews')).rows.length,0);await denied(()=>aiSummary());await denied(()=>batch([c]));await denied(()=>db.query('select public.reserve_skill_suggestion($1)',[first]));}
+await db.exec('reset role;set role anon');await denied(()=>aiSummary());await denied(()=>batch([c]));await denied(()=>db.query('select * from public.lesson_skill_reviews'));
+console.log('PASS: private AI summaries, stale-summary protection, atomic reviewed rating batches, role isolation, cancelled lessons and persistent request limits');
 await db.close();

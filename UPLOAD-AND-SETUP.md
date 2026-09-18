@@ -129,3 +129,15 @@ Until that is configured, select locations on the map and enter travel allowance
 After publishing and finishing account setup, test instructor sign-in, a pupil's read-only access, one lesson and a teaching-file upload. The application and access rules passed local tests, and the live database protection settings were checked, and the instructor has signed in using the earlier email-link flow. Real password sign-in and a live iPhone lesson still need testing after this update is uploaded.
 
 On iPhone, keep the website open for GPS recording. Reliable recording with the screen locked still requires a separate recorder with GPX import, or a future native companion app.
+
+## AI lesson skill review update
+
+The September 18 AI update includes private instructor summaries, OpenAI skill suggestions, reviewed rating changes and optional skill pins.
+
+For the current `driving-diary` project, migration `202609180003_ai_skill_review.sql` and the `suggest-skills` Edge Function were applied during setup. **Do not run that migration again.**
+
+1. Extract `ai-skills-update.zip` and upload **all its contents, including the folders**, to the root of your existing GitHub repository. Replace the matching files and commit to `main`. Wait for GitHub Pages to finish publishing and refresh the website.
+2. Open Supabase → Edge Functions → Secrets. Add a secret named **OPENAI_API_KEY**, paste your OpenAI platform API key into its Value field and Save. Enter the key directly in Supabase, not in the website files or this conversation.
+3. Open a lesson as instructor. Enter a summary under **Review skills from lesson summary**, then **Find relevant skills**. Review the matches, choose any new ratings, tick any individual skills or core headings to pin, and press **Save selected changes**.
+
+The local sample preview shows fixed examples only. A real AI request still needs the key and an OpenAI API billing balance. The implementation, permissions and save/pin flow were tested with isolated fixtures; a live model response cannot be checked until a key is installed.

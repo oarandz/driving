@@ -77,3 +77,29 @@ test('activity recording excludes demo, instructor, preview and hidden pages; re
  h.context.document.hidden=false;await h.run('trackPupilActivity()');await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,1);
  h.run('activityAttemptAt=0');await h.run('trackPupilActivity()');assert.equal(h.context.activityCalls.length,2);
 });
+
+test('AI skill review is private to instructor, retains drafts and validates matches',()=>{
+ const h=harness();h.state.lessons=[lesson('complete','p2',-1,'completed')];h.state.skillReviews=[{lesson_id:'complete',summary:'Private instructor summary'}];
+ h.run("openLesson('complete')");assert.match(h.nodes.get('#modal').html,/Private instructor summary/);assert.match(h.nodes.get('#modal').html,/Find relevant skills sends/);
+ h.nodes.get('#skill-review-summary').value='Changed private draft';h.nodes.get('#skill-review-summary').oninput();h.run("openLesson('complete')");assert.match(h.nodes.get('#modal').html,/Changed private draft/);
+ assert.throws(()=>h.run("normaliseSkillSuggestions([{skill_id:'1.17',reason:'Bad'}])"));assert.throws(()=>h.run("normaliseSkillSuggestions([{skill_id:'1.1',reason:'x'},{skill_id:'1.1',reason:'x'}])"));
+ h.run("previewPupil('p2');openLesson('complete')");assert.doesNotMatch(h.nodes.get('#modal').html,/Private instructor|Changed private|skill-review|suggest-skills/);
+});
+test('reviewed ratings save only selected skills, are atomic in demo and exclude pupil preview',async()=>{
+ const h=harness();h.context.crypto={randomUUID:()=>String(Math.random())};h.state.lessons=[lesson('complete','p2',-1,'completed')];
+ h.state.detailSkills=[{pupil_id:'p2',category_id:9,item_id:6,rating:1},{pupil_id:'p2',category_id:19,item_id:10,rating:2}];
+ const before=JSON.stringify(h.state.detailSkills);
+ await assert.rejects(h.run("applySkillReview('complete',[{category_id:9,item_id:6,rating:2,expected:1},{category_id:19,item_id:10,rating:4,expected:0}])"));assert.equal(JSON.stringify(h.state.detailSkills),before);
+ await h.run("applySkillReview('complete',[{category_id:9,item_id:6,rating:2,expected:1}])");assert.equal(h.state.detailSkills.find(r=>r.category_id===9).rating,2);assert.equal(h.state.detailSkills.find(r=>r.category_id===19).rating,2);
+ h.run("previewPupil('p2')");await assert.rejects(h.run("applySkillReview('complete',[{category_id:9,item_id:6,rating:4,expected:2}])"));await assert.rejects(h.run("requestSkillSuggestions('complete','some driving summary')"));
+});
+
+test('review can pin individual skills with updated ratings and keep private summary out of pupil view',async()=>{
+ const h=harness();h.context.crypto={randomUUID:()=>String(Math.random())};h.state.lessons=[lesson('complete','p2',-1,'completed')];
+ await h.run("applySkillReview('complete',[{category_id:9,item_id:6,rating:2,expected:0}],[],[{category_id:9,item_id:6}])");
+ assert.equal(h.state.detailPins[0].rating,2);assert.equal(h.state.detailPins[0].title,'Mirror checks before slowing');
+ await h.run("applySkillReview('complete',[{category_id:9,item_id:6,rating:3,expected:2}],[],[{category_id:9,item_id:6}])");assert.equal(h.state.detailPins[0].rating,2);
+ await h.run("applySkillReview('complete',[],[19],[{category_id:19,item_id:10}])");assert.equal(h.state.detailPins.length,2);assert.equal(h.state.skillPins.length,1);
+ h.run("previewPupil('p2');openLesson('complete')");assert.match(h.nodes.get('#lesson-skills').html,/9.6 Mirror checks before slowing/);assert.match(h.nodes.get('#lesson-skills').html,/Saved rating: 2 — Often prompted/);assert.doesNotMatch(h.nodes.get('#lesson-skills').html,/Update saved|Unpin/);
+ await assert.rejects(h.run("saveLessonDetailPin('complete',9,6,true)"));
+});
